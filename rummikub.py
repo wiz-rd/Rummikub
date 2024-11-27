@@ -493,3 +493,11 @@ if __name__ == "__main__":
     for hand in game.table.hands:
         print(hand.beautify_hand())
 
+
+# TODO:
+
+# make a way to store the ENTIRE game state in the server
+# also make a way to store the player data in a SEPARATE TABLE
+# make a data chart to demonstrate how the SQL server will be organized
+
+

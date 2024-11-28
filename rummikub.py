@@ -291,6 +291,12 @@ class Game:
     The "table" at a current state and various other
     statistics about the game.
     """
+    # should increment based on the previous game's ID
+    # and/or the total number of games.
+    # just a simple tracking method. Doesn't have to be
+    # anything more complex/secure like a player UUID, so may as
+    # well keep things simple.
+    gameID: int = 0
     win_condition: WinConditions = WinConditions.HIGHEST_SCORE
     state: State = State.PREGAME
     table: Table = field(default_factory=Table)
@@ -405,7 +411,6 @@ class Game:
             # generate all tiles
             for _ in range(int(set_count / 4)):
                 for color in Color.color_options():
-                    print(color)
                     for num in range(self.min_tile, self.max_tile + 1):
                         self.table.pool.append(Tile(number=num, color=color))
 
@@ -492,6 +497,9 @@ if __name__ == "__main__":
     # randomize player positions
     game.randomize_positions()
     game.dole_out_hands()
+
+    print(game.table)
+
     for hand in game.table.hands:
         print(hand.beautify_hand())
 

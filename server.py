@@ -52,17 +52,18 @@ Tables:
 #######################################################
 
 Users Table:
-- userName [str]
-- email [str]
+- uuid [TEXT] (PRIMARY KEY)
+- userName [TEXT]
+- email [TEXT]
+- password [TEXT]
 
 Emails will NOT be used, and likely won't even be collected to avoid being breached.
 It would literally only be a preventative measure for DoS'ing or spamming
 the database. Having a hash of them could prevent making multiple accounts
 with the same email, hence this field.
 
-- uuid [str] (PRIMARY KEY)
-- wins [int]
-- losses [int]
+- wins [TEXT]
+- losses [TEXT]
 
 Perhaps I shouldn't consider losses that much, as it's super easy to
 lose this game and it's not luck based. Additionally, it doesn't show skill
@@ -75,10 +76,10 @@ add it for edge cases or in case people get real competative with it.
 
 Games Table:
 - gameID [int] (PRIMARY KEY - should just be an integer)
-- gameState [str]
-- tablePool [JSON obj] NOTE: SQLite does not have list objects
-- tableHands [JSON obj]
-- groups [JSON obj]
+- gameState [TEXT]
+- tablePool [TEXT (json)] NOTE: SQLite does not have list objects
+- tableHands [TEXT (json)]
+- groups [TEXT (json)] NOTE: this stores the sets and runs on the table
 
 NOTE: Should dole out hands upon request BUT
 should have some measures to prevent it from
@@ -98,7 +99,7 @@ It's a join table to handle a many-to-many relationship between
 players and games.
 
 Ingame Table:
-- playerUuid [str] (FOREIGN KEY)
+- userUuid [str] (FOREIGN KEY)
 - gameID [str] (FOREIGN KEY)
 
 """

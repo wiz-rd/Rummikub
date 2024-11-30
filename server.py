@@ -31,7 +31,9 @@ crazy password (your stats..?), so that'll be my advice.
 import json
 import random
 import sqlite3
+import logging
 from uuid import uuid4
+from itertools import chain
 
 from rummikub import *
 
@@ -39,6 +41,8 @@ from rummikub import *
 DATA_FOLDER = "./data"
 # NOTE: please see above regarding credentials
 DATA_DB = f"{DATA_FOLDER}/data.db"
+LOGGING_FORMAT = "%(asctime)s — %(levelname)s — [%(filename)s] -> %(message)s"
+logger = logging.getLogger(__name__)
 
 """
 This is a brief outline of the database and what
@@ -52,7 +56,7 @@ Tables:
 #######################################################
 
 Users Table:
-- uuid [TEXT] (PRIMARY KEY)
+- uuserID [TEXT] (PRIMARY KEY)
 - userName [TEXT]
 - email [TEXT]
 - password [TEXT]
@@ -99,8 +103,75 @@ It's a join table to handle a many-to-many relationship between
 players and games.
 
 Ingame Table:
-- userUuid [str] (FOREIGN KEY)
+- playerID [str] (FOREIGN KEY)
 - gameID [str] (FOREIGN KEY)
 
 """
+
+
+def initialize_databases(database_connection):
+    """
+    Creates the database if there isn't one already
+    and adds the appropriate tables etc.
+    """
+
+    req_tables_and_queries = {
+        "games": """CREATE TABLE games(
+        gameID INTEGER,
+        gameState TEXT,
+        tablePool TEXT,
+        tableHands TEXT,
+        groups TEXT,
+        PRIMARY KEY(gameID DESC));""",
+
+        "users": """CREATE TABLE users(
+        userID TEXT,
+        userName TEXT,
+        email TEXT,
+        password TEXT,
+        wins INTEGER,
+        losses INTEGER,
+        lastLogon TEXT,
+        PRIMARY KEY(userID DESC));""",
+
+        "ingame": """CREATE TABLE ingame(
+        gameID INTEGER,
+        playerID TEXT,
+        FOREIGN KEY(gameID) REFERENCES games(gameID),
+        FOREIGN KEY(playerID) REFERENCES users(userID));""",
+    }
+
+    cur = database_connection.cursor()
+    tables_res = cur.execute("SELECT name FROM sqlite_master")
+
+    # "flattening" the table using itertools
+    # and chain.from_terable. This makes it all
+    # into a single list of items
+    tables = tables_res.fetchall()
+    temp_chain = chain.from_iterable(tables)
+    tables = list(temp_chain)
+
+    logger.info("Tables in database: %s", tables)
+
+    for tb in req_tables_and_queries:
+        # if the table doesn't exist,
+        # create it.
+        # the tables should absolutely be created
+        # after the very first run, hence the warnings later.
+
+        # note that executemany is probably more performant than
+        # multiple execute()s but this should only be called once.
+        # and have an executemany instead of many manual execute()s.
+        if tb not in tables:
+            logger.warning(msg=f"Table {tb} does not exist. Creating.")
+            cur.execute(req_tables_and_queries[tb])
+
+    database_connection.commit()
+    cur.close()
+
+
+if __name__ == "__main__":
+    logging.basicConfig(filename="server.log", level=logging.INFO, format=LOGGING_FORMAT)
+    con = sqlite3.connect(DATA_DB)
+    initialize_databases(con)
 

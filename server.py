@@ -103,13 +103,13 @@ It's a join table to handle a many-to-many relationship between
 players and games.
 
 Ingame Table:
-- playerID [str] (FOREIGN KEY)
 - gameID [str] (FOREIGN KEY)
+- playerID [str] (FOREIGN KEY)
 
 """
 
 
-def initialize_databases(database_connection):
+def initialize_db_and_tables(con) -> None:
     """
     Creates the database if there isn't one already
     and adds the appropriate tables etc.
@@ -141,7 +141,7 @@ def initialize_databases(database_connection):
         FOREIGN KEY(playerID) REFERENCES users(userID));""",
     }
 
-    cur = database_connection.cursor()
+    cur = con.cursor()
     tables_res = cur.execute("SELECT name FROM sqlite_master")
 
     # "flattening" the table using itertools
@@ -151,6 +151,10 @@ def initialize_databases(database_connection):
     temp_chain = chain.from_iterable(tables)
     tables = list(temp_chain)
 
+    # this will generate a lot of logs if it's ran every time
+    # something is performed, which is why this function is
+    # intended to be ran only once - when server.py is started
+    # up again. it's a sanity check.
     logger.info("Tables in database: %s", tables)
 
     for tb in req_tables_and_queries:
@@ -166,12 +170,127 @@ def initialize_databases(database_connection):
             logger.warning(msg=f"Table {tb} does not exist. Creating.")
             cur.execute(req_tables_and_queries[tb])
 
-    database_connection.commit()
+    con.commit()
     cur.close()
 
 
+def insert_into_table(con, table_name, data: list | str) -> None:
+    """
+    This should be called when a user is created,
+    for example. Data should be either a string or list
+    of items. Examples:
+
+    "'ID', 'username', 'email'..." OR
+    ["ID", "username", "email",...]
+
+    A list is probably easier. See the attached ER diagram for
+    how to format each specific table.
+    """
+    cur = con.cursor()
+
+    if isinstance(data, str):
+        query = f"INSERT INTO {table_name} VALUES({data});"
+    else:
+        # put quotes around everything for the query
+        data = [f"'{x}'" for x in data]
+        query = f"INSERT INTO {table_name} VALUES({', '.join(data)});"
+
+    res = cur.execute(query)
+    res.close()
+    con.commit()
+    logger.debug(f"Added entry to {table_name}.")
+
+
+# TODO: potentially modify this to have a bit more of
+# a universal method like the one below
+def get_game_data(con, gameID: int) -> tuple:
+    """
+    Gets data for the specified game ID.
+    Basically pre-generates a nice command for you
+    to automatically grab the specified game.
+    """
+    cur = con.cursor()
+
+    query = f"SELECT * FROM games WHERE gameID == '{gameID}';"
+
+    game_data_res = cur.execute(query)
+    game_data = game_data_res.fetchone()
+    game_data_res.close()
+    cur.close()
+
+    return game_data
+
+
+def _get_game_or_player(con, ID: str | int) -> list | None:
+    """
+    A kind of "internal" method that calls similar code
+    regarding the join table "ingame". This consolidates the two
+    functions into one instead of writing the code twice.
+
+    If a player ID is given, it returns the games they're in.
+
+    If a game ID is given, it returns the players in that game.
+    """
+    cur = con.cursor()
+    
+    if isinstance(ID, str):
+        query = f"SELECT gameID FROM ingame WHERE playerID == '{ID}';"
+    elif isinstance(ID, int):
+        query = f"SELECT playerID FROM ingame WHERE gameID == '{ID}';"
+    else:
+        logger.critical(f"A faulty ID was passed to get a row from INGAME. The id: {ID}. Nothing will be returned.")
+        con.close()
+        return None
+
+    games_data_res = cur.execute(query)
+    games_data = games_data_res.fetchall()
+    games_data_res.close()
+    cur.close()
+
+    temp_chain = chain.from_iterable(games_data)
+    games_data = list(temp_chain)
+
+    return games_data
+
+
+def get_games_with_player(con, playerID: str) -> list:
+    """
+    Gets the game IDs from the join table "ingame".
+
+    In other words: gets the games a player is in.
+    """
+    return _get_game_or_player(con, playerID)
+
+
+def get_players_in_game(con, gameID: int) -> list:
+    """
+    Gets the player IDs from the join table "ingame".
+
+    In other words: gets all the players in a game.
+    """
+    return _get_game_or_player(con, gameID)
+
+
 if __name__ == "__main__":
+    """
+    NOTE: make sure to close each connection after it's
+    served its purpose. This should hopefully save on resources.
+    """
     logging.basicConfig(filename="server.log", level=logging.INFO, format=LOGGING_FORMAT)
     con = sqlite3.connect(DATA_DB)
-    initialize_databases(con)
+    initialize_db_and_tables(con)
+    # insert_into_table(
+    #     con,
+    #     "users",
+    #     ["sampleid",
+    #      "sample_username",
+    #      "sampleemail",
+    #      "samplepassword",
+    #      "1",
+    #      "0",
+    #      "yesterday"])
+
+    get_game_data(con, 1)
+    print(get_games_with_player(con, "sampleid"))
+    print(get_players_in_game(con, 1))
 

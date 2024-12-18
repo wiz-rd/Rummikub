@@ -43,6 +43,7 @@ DATA_FOLDER = "./data"
 DATA_DB = f"{DATA_FOLDER}/data.db"
 LOGGING_FORMAT = "%(asctime)s — %(levelname)s — [%(filename)s] -> %(message)s"
 logger = logging.getLogger(__name__)
+logging.basicConfig(filename="server.log", level=logging.INFO, format=LOGGING_FORMAT)
 
 """
 This is a brief outline of the database and what
@@ -271,12 +272,25 @@ def get_players_in_game(con, gameID: int) -> list:
     return _get_game_or_player(con, gameID)
 
 
+def main_server_loop():
+    """
+    TODO: Delete this?
+    Placeholder method.
+    """
+    con = sqlite3.connect(DATA_DB)
+    initialize_db_and_tables(con)
+
+    awaiting_requests = True
+
+    while awaiting_requests:
+        "wait for requests"
+
+
 if __name__ == "__main__":
     """
     NOTE: make sure to close each connection after it's
     served its purpose. This should hopefully save on resources.
     """
-    logging.basicConfig(filename="server.log", level=logging.INFO, format=LOGGING_FORMAT)
     con = sqlite3.connect(DATA_DB)
     initialize_db_and_tables(con)
     # insert_into_table(

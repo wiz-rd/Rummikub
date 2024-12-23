@@ -17,6 +17,13 @@ def hello_world() -> dict[str, str]:
     """Keeping the tradition alive with hello world."""
     return {"hello": "world"}
 
+
+@get("/game/{gameid:str}")
+def list_players(gameid: str) -> dict[str, list[str]]:
+    """Returns the players in a game."""
+    return {"players": [""]}
+
+
 @get("/players")
 def list_players() -> dict[str, list[str]]:
     """Returns the players in a game."""

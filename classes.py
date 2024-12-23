@@ -57,7 +57,7 @@ def to_json(cls):
         # prefers them to be double quotes
         return str(self.__dict__).replace("'", '"')
     
-    cls.to_json() = new_str
+    cls.to_json = new_str
     return cls
 
 
@@ -69,7 +69,7 @@ def to_json(cls):
 @add_enum_options
 class State(Enum):
     # NOTE: order these alphabetically
-    ENDED = "The game has just finished"
+    ENDED = "The game has just finished."
     ONGOING = "The game is currently ongoing."
     PREGAME = "The game has not started yet."
 
@@ -131,7 +131,8 @@ class User:
 
     def __post_init__(self):
         """Have to generate a default uuid manually due to psuedo-randomness."""
-        self.uuid = uuid4().hex
+        if self.id is None:
+            self.id = uuid4().hex
 
 
 @dataclass
@@ -146,9 +147,9 @@ class Hand:
     with the player means in the DB, scores would be stored with players,
     which is undesirable
     """
+    owner_id: UUID
     score: int = 0
     tiles: list[Tile] = field(default_factory=list)
-    owner_id: UUID
 
     def update_score(self):
         """
@@ -227,17 +228,22 @@ class Game:
     # these should be referenced individually
     # and stored in columns
     #
-    game_id: int = 0
-    game_state: State = State.PREGAME
-    table: Table = field(default_factory=Table)
+    id: UUID
 
     # stores whose turn it is in the game currently
     current_player_turn: UUID
 
+    game_state: State = State.PREGAME
+    table: Table = field(default_factory=Table)
+
+
+    # ----------------------------------------------
     #
     # the rest should NOT be referenced individually
     # and should be stored as a part of the JSON blob
     # in the database
+    #
+    # E.g. it should be stored as gameData
     #
 
     # time limit for turns in seconds
@@ -255,6 +261,13 @@ class Game:
     # this should be able to be changed
     max_players: int = 4
     joker_count: int = -1
+    max_tile: int = 13
+    min_tile: int = 1
+
+    def __post_init__(self):
+        """Have to generate a default uuid manually due to psuedo-randomness."""
+        if self.id is None:
+            self.id = uuid4().hex
 
     def initialize(self, already_initialized: bool):
         """
@@ -262,8 +275,6 @@ class Game:
         determining how many tiles to use, etc.
         """
         if not already_initialized:
-                self.max_players = len(self.players)
-
                 # clamp the max player count between 4 and 6
                 if self.max_players < MIN_POSSIBLE_PLAYERS or self.max_players > MAX_POSSIBLE_PLAYERS:
                     # this should be caught on the frontend, but in case it's not
@@ -294,7 +305,7 @@ class Game:
                 if self.expected_tile_count > MAX_TILE_COUNT:
                     raise ValueError(f"The tile count {self.expected_tile_count} is higher than the maximum count of {MAX_TILE_COUNT}.")
 
-    def to_json(self):
+    def get_gamedata(self) -> str:
         """
         Returns all attributes as a string
         BUT skips the attributes with their own
@@ -307,9 +318,11 @@ class Game:
         """
         json_to_return = self.__dict__.copy()
         # delete the values that are already stored in columns
-        del json_to_return["game_id"]
+        del json_to_return["id"]
         del json_to_return["game_state"]
         del json_to_return["table"]
         del json_to_return["current_player_turn"]
 
         str(json_to_return).replace("'", '"')
+        return json_to_return
+

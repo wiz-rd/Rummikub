@@ -1,4 +1,8 @@
+import json
+import sqlite3
+
 from starlite import Starlite, get
+
 from functions import *
 
 """
@@ -13,6 +17,8 @@ served its purpose. This should hopefully save on resources.
 con = sqlite3.connect(DATA_DB)
 initialize_db_and_tables(con)
 
+
+# TODO: delete testing data
 game = Game()
 game.initialize(False)
 

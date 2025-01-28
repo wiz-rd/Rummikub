@@ -29,14 +29,9 @@ crazy password (your stats..?), so that'll be my advice.
 """
 
 import os
-import json
 import random
-import sqlite3
 import logging
-from uuid import uuid4
 from itertools import chain
-
-from starlite import Starlite, get
 
 from classes import *
 
@@ -44,7 +39,7 @@ from classes import *
 DATA_FOLDER = os.path.normpath(os.path.abspath("./data"))
 # NOTE: please see above regarding credentials
 DATA_DB = os.path.join(DATA_FOLDER, "data.db")
-LOGGING_FORMAT = "%(asctime)s — %(levelname)s — [%(filename)s] -> %(message)s"
+LOGGING_FORMAT = "%(asctime)s \t %(levelname)s \t [%(filename)s] -> %(message)s"
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="server.log", level=logging.INFO, format=LOGGING_FORMAT)
 
@@ -137,6 +132,7 @@ def initialize_db_and_tables(con) -> None:
     temp_chain = chain.from_iterable(tables)
     tables = list(temp_chain)
 
+    # NOTE:
     # this will generate a lot of logs if it's ran every time
     # something is performed, which is why this function is
     # intended to be ran only once - when server.py is started
@@ -287,16 +283,3 @@ def shuffle(max_players: int = 4, human_readable: bool = False) -> tuple:
     random.shuffle(order)
     return tuple(order)
 
-
-def main_server_loop():
-    """
-    TODO: Delete this?
-    Placeholder method.
-    """
-    con = sqlite3.connect(DATA_DB)
-    initialize_db_and_tables(con)
-
-    awaiting_requests = True
-
-    while awaiting_requests:
-        "wait for requests"

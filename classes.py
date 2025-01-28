@@ -20,24 +20,6 @@ MIN_POSSIBLE_PLAYERS: int = 4
 ##############
 
 
-def add_enum_options(cls):
-    """
-    Adds an options() function that
-    returns a list of all Enum options.
-    """
-    def options(cls):
-        """
-        Print the available Enum options
-        sorted alphabetically.
-        """
-        opts = cls._member_names_
-        opts.sort()
-        return opts
-
-    cls.options = classmethod(options)
-    return cls
-
-
 def to_json(cls):
     """
     Modifies the __str__() function of the
@@ -65,34 +47,18 @@ def to_json(cls):
 # ENUMS #
 #########
 
+STATES = [
+    "ENDED",
+    "ONGOING",
+    "PREGAME"
+]
 
-@add_enum_options
-# TODO: remove this!! and maybe colors also?
-class State(Enum):
-    # NOTE: order these alphabetically
-    ENDED = "The game has just finished."
-    ONGOING = "The game is currently ongoing."
-    PREGAME = "The game has not started yet."
-
-@add_enum_options
-class Color(Enum):
-    """
-    An enum to hold the possible colors.
-    I may allow for changing to custom colors later.
-    """
-    # remember, order these alphabetically
-    BLACK = "#000000"
-    BLUE = "#00B9F2"
-    ORANGE = "#FFB530"
-    RED = "#FF2E17"
-
-    def color_options():
-        """
-        Return Color options instead
-        of a string of human-readable
-        options.
-        """
-        return Color.BLACK, Color.BLUE, Color.ORANGE, Color.RED
+COLORS = {
+    "BLACK": "#000000",
+    "BLUE": "#00B9F2",
+    "ORANGE": "#FFB530",
+    "RED": "#FF2E17",
+}
 
 
 ###########
@@ -108,7 +74,7 @@ class Tile:
     """
     # default values - should be changed if needed.
     number: int = 0
-    color: Color = Color.BLACK
+    color: str = COLORS["BLACK"]
     joker: bool = False
     # this could just be the number 0,
     # but a separate flag increases readability a ton.
@@ -234,7 +200,7 @@ class Game:
     # stores whose turn it is in the game currently
     current_player_turn: UUID = None
 
-    game_state: State = State.PREGAME
+    game_state: str = "PREGAME"
     table: Table = field(default_factory=Table)
 
 

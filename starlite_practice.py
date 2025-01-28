@@ -6,7 +6,7 @@ To run this, run:
 
 uvicorn starlite_practice:app
 
-Note that uvicorn/starlite have this as:
+Note that starlite has this as:
 
 uvicorn starlite_practice:app --reload
 """

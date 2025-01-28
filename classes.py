@@ -67,6 +67,7 @@ def to_json(cls):
 
 
 @add_enum_options
+# TODO: remove this!! and maybe colors also?
 class State(Enum):
     # NOTE: order these alphabetically
     ENDED = "The game has just finished."
@@ -116,15 +117,15 @@ class Tile:
 # NOTE: API-exposed, if the person has the right creds
 @dataclass
 @to_json
-class User:
+class Player:
     """
     Players, player data, and their scores.
     """
-    id: UUID
-    username: str
-    email: str
-    password: str
-    last_login: str
+    id: UUID = None
+    username: str = ""
+    email: str = ""
+    password: str = ""
+    last_login: str = ""
     wins: int = 0
     losses: int = 0
 
@@ -228,10 +229,10 @@ class Game:
     # these should be referenced individually
     # and stored in columns
     #
-    id: UUID
+    id: UUID = None
 
     # stores whose turn it is in the game currently
-    current_player_turn: UUID
+    current_player_turn: UUID = None
 
     game_state: State = State.PREGAME
     table: Table = field(default_factory=Table)
@@ -323,6 +324,6 @@ class Game:
         del json_to_return["table"]
         del json_to_return["current_player_turn"]
 
-        str(json_to_return).replace("'", '"')
+        json_to_return = str(json_to_return).replace("'", '"')
         return json_to_return
 

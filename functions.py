@@ -31,6 +31,7 @@ crazy password (your stats..?), so that'll be my advice.
 import os
 import random
 import logging
+from uuid import UUID
 from itertools import chain
 
 from classes import *
@@ -161,6 +162,19 @@ def initialize_db_and_tables(con) -> None:
     cur.close()
 
 
+def valid_uuid(id: str) -> bool:
+    try:
+        UUID(id, version=4)
+    except ValueError:
+        # seems like someone is trying
+        # a SQL injection or fiddling with
+        # their client in some way...
+        logger.warning(f"Strange UUID request from client, potential SQL injection attack. ID: {id}")
+        return False
+
+    return True
+
+
 def insert_into_table(con, table_name, data: list | str) -> None:
     """
     This should be called when a user is created,
@@ -196,6 +210,11 @@ def get_game_data(con, gameID: int) -> tuple:
     Basically pre-generates a nice command for you
     to automatically grab the specified game.
     """
+    # if the ID is suspicious...
+    if not valid_uuid(gameID):
+        # return a simple "nothing"
+        return None
+
     cur = con.cursor()
 
     query = f"SELECT * FROM games WHERE gameID == '{gameID}';"
@@ -218,15 +237,12 @@ def _get_game_or_player(con, ID: str | int) -> list | None:
 
     If a game ID is given, it returns the players in that game.
     """
-    cur = con.cursor()
-    
-    if isinstance(ID, str):
-        query = f"SELECT gameID FROM ingame WHERE playerID == '{ID}';"
-    elif isinstance(ID, int):
-        query = f"SELECT playerID FROM ingame WHERE gameID == '{ID}';"
-    else:
-        logger.critical(f"A faulty ID was passed to get a row from INGAME. The id: {ID}. Nothing will be returned.")
+    if not valid_uuid(ID):
         return None
+
+    cur = con.cursor()
+
+    query = f"SELECT gameID,playerID FROM ingame WHERE gameID == '{ID}' OR playerID == '{ID}';"
 
     games_data_res = cur.execute(query)
     games_data = games_data_res.fetchall()

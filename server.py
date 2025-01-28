@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from starlite import Starlite, MediaType, status_codes, get
+from starlite import Starlite, HTTPException, MediaType, status_codes, get
 
 from functions import *
 
@@ -55,6 +55,16 @@ print(f"Expected game url - http://localhost:8000/game/{game.id}")
 # print(get_players_in_game(con, 1))
 
 
+# TODO: implement OAuth or something
+# similar for users.
+def authenticate_player():
+    """
+    Verifies the user is who they
+    claim to be.
+    """
+    return True
+
+
 ##########
 # ROUTES #
 ##########
@@ -81,13 +91,23 @@ async def game_data(game_id: str) -> dict[str, str]:
     # and database in tandem.
     # Another alternative is Passport.js
 
+    # if the user isn't authenticated,
+    # avoid giving them any information
+    # TODO: Implement this.
+    if not authenticate_player():
+        return
+
     data = get_game_data(con, game_id)
-    # TODO: figure out how to return with a 404
-    # status code if a game isn't found?
+
+    # if no data is found for the game ID,
+    # the game does not exist; return a 404
+    if data is None:
+        raise HTTPException(status_code=404, detail="There is no game with that ID.")
+
     # convert all double quotes to single quotes
     # so they don't have to be escaped when
     # sent to the client
-    data = [x.replace('"', "'") for x in data] if data is not None else "There is no game with that ID."
+    data = [x.replace('"', "'") for x in data]
     return {"game_data": data}
 
 app = Starlite(route_handlers=[base_route,game_data,])

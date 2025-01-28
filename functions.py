@@ -87,6 +87,11 @@ def initialize_db_and_tables(con) -> None:
     and adds the appropriate tables etc.
     """
 
+    # NOTE: see next logger.info line regarding
+    # sanity check and the possibility of
+    # overwhelming amount of logs.
+    logger.info("Server started. Checking tables.")
+
     req_tables_and_queries = {
         "games": """CREATE TABLE games(
         gameID TEXT,

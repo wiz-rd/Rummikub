@@ -1,7 +1,5 @@
 from dataclasses import dataclass, field
 from uuid import UUID, uuid4
-from enum import Enum
-import random
 
 
 ######################
@@ -10,7 +8,7 @@ import random
 
 # tile count should never exceed this many
 # both for sanity and resources
-MAX_TILE_COUNT: int = 1_000_000
+MAX_TILE_COUNT: int = 1_000
 MAX_POSSIBLE_PLAYERS: int = 6
 MIN_POSSIBLE_PLAYERS: int = 4
 

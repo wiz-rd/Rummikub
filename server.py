@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from starlite import Starlite, get
+from starlite import Starlite, MediaType, status_codes, get
 
 from functions import *
 
@@ -34,8 +34,8 @@ insert_into_table(
     ]
 )
 
-print(f"GameID — {game.id}")
-print(f"Expected game url — localhost:8000/game/{game.id}")
+print(f"GameID - {game.id}")
+print(f"Expected game url - http://localhost:8000/game/{game.id}")
 
 # # testing the database:
 
@@ -60,7 +60,7 @@ print(f"Expected game url — localhost:8000/game/{game.id}")
 ##########
 
 @get("/")
-async def base_route(game_id: str) -> dict[str, str]:
+async def base_route() -> dict[str, str]:
     """
     Returns a simply success message indicating the
     API/server is functioning properly.
@@ -82,10 +82,12 @@ async def game_data(game_id: str) -> dict[str, str]:
     # Another alternative is Passport.js
 
     data = get_game_data(con, game_id)
+    # TODO: figure out how to return with a 404
+    # status code if a game isn't found?
     # convert all double quotes to single quotes
     # so they don't have to be escaped when
     # sent to the client
-    data = [x.replace('"', "'") for x in data]
-    return {"contents": data}
+    data = [x.replace('"', "'") for x in data] if data is not None else "There is no game with that ID."
+    return {"game_data": data}
 
-app = Starlite(route_handlers=[base_route,game_data])
+app = Starlite(route_handlers=[base_route,game_data,])

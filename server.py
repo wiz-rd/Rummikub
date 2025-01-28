@@ -1,3 +1,16 @@
+#!/usr/bin/python3
+
+# created by @wiz-rd
+
+"""
+To run this server, run:
+
+uvicorn server:app
+
+This will most likely be different
+for a Linux machine.
+"""
+
 import json
 import sqlite3
 
@@ -57,7 +70,7 @@ print(f"Expected game url - http://localhost:8000/game/{game.id}")
 
 # TODO: implement OAuth or something
 # similar for users.
-def authenticate_player():
+def authenticate_player() -> bool:
     """
     Verifies the user is who they
     claim to be.

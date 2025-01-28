@@ -35,6 +35,8 @@ import logging
 from uuid import uuid4
 from itertools import chain
 
+from starlite import Starlite, get
+
 from rummikub import *
 
 
@@ -78,6 +80,11 @@ players and games.
 """
 
 
+####################
+# INTERNAL METHODS #
+####################
+
+
 def initialize_db_and_tables(con) -> None:
     """
     Creates the database if there isn't one already
@@ -88,10 +95,17 @@ def initialize_db_and_tables(con) -> None:
         "games": """CREATE TABLE games(
         gameID TEXT,
         gameState TEXT,
-        tablePool TEXT,
-        tableHands TEXT,
-        groups TEXT,
+        table TEXT,
+        currentPlayerTurn TEXT,
+        gameData TEXT,
         PRIMARY KEY(gameID DESC));""",
+        # TODO: Should I store current player uuid or position?
+        # gameData is things like time
+        # for a turn, each player's score,
+        # the placement of each player, etc.
+        # table should store stuff like
+        # the sets and runs on the table
+        # and the pool of remaning tiles
 
         "users": """CREATE TABLE users(
         userID TEXT,
@@ -106,6 +120,8 @@ def initialize_db_and_tables(con) -> None:
         "ingame": """CREATE TABLE ingame(
         gameID INTEGER,
         playerID TEXT,
+        hand TEXT,
+        turnNumber INT,
         FOREIGN KEY(gameID) REFERENCES games(gameID),
         FOREIGN KEY(playerID) REFERENCES users(userID));""",
     }
@@ -208,7 +224,6 @@ def _get_game_or_player(con, ID: str | int) -> list | None:
         query = f"SELECT playerID FROM ingame WHERE gameID == '{ID}';"
     else:
         logger.critical(f"A faulty ID was passed to get a row from INGAME. The id: {ID}. Nothing will be returned.")
-        con.close()
         return None
 
     games_data_res = cur.execute(query)
@@ -240,6 +255,38 @@ def get_players_in_game(con, gameID: int) -> list:
     return _get_game_or_player(con, gameID)
 
 
+def shuffle(max_players: int = 4, human_readable: bool = False) -> tuple:
+    """
+    Returns a tuple of randomized turn orders
+    to be paired with players.
+
+    Example return data:
+    (1, 0, 2, 3)
+
+    And each players' order would then be stored in
+    the ingame table with each player and hand.
+    It's essentially drawing a ticket.
+
+    Human readable: start turns at 1 instead of 0.
+    """
+    # start from 0 if human_readable is False,
+    # otherwise start from 1 (1st, 2nd, 3rd, etc
+    # instead of 0 meaning 1st, 1 meaning 2nd, and so on).
+    order = list(range(max_players)) if not human_readable else list(range(1, max_players + 1))
+    # although it would be good to keep things consistent
+    # and to always start at 0, I plan to just compare values
+    # for which is lesser or greater or to sort the list-UUID pairs
+    # regardless, so it doesn't really matter
+
+    # pair this shuffle function with
+    # a list of player IDs like:
+    # (h22Lab3, weh32ajd, 190aAApp, bmeQL24l)
+    # and then store their turn with each
+    # respective player
+    random.shuffle(order)
+    return tuple(order)
+
+
 def main_server_loop():
     """
     TODO: Delete this?
@@ -254,13 +301,24 @@ def main_server_loop():
         "wait for requests"
 
 
+###############
+# MAIN SCRIPT #
+###############
+
+
 if __name__ == "__main__":
     """
     NOTE: make sure to close each connection after it's
     served its purpose. This should hopefully save on resources.
     """
+    print(shuffle(human_readable=True))
+    exit()
+
     con = sqlite3.connect(DATA_DB)
     initialize_db_and_tables(con)
+
+    # # testing the database:
+
     # insert_into_table(
     #     con,
     #     "users",
@@ -272,7 +330,20 @@ if __name__ == "__main__":
     #      "0",
     #      "yesterday"])
 
-    get_game_data(con, 1)
-    print(get_games_with_player(con, "sampleid"))
-    print(get_players_in_game(con, 1))
+    # get_game_data(con, 1)
+    # print(get_games_with_player(con, "sampleid"))
+    # print(get_players_in_game(con, 1))
 
+
+    ##########
+    # ROUTES #
+    ##########
+
+
+    @get("/game/{game_id:str}")
+    async def hello_world(game_id: str) -> dict[str, str]:
+        """
+        Returns most information about a game,
+        should the user have the right permissions.
+        """
+        return {"hello": "world"}

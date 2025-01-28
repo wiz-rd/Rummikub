@@ -13,15 +13,15 @@ uvicorn starlite_practice:app --reload
 
 
 @get("/")
-def hello_world() -> dict[str, str]:
+async def hello_world() -> dict[str, str]:
     """Keeping the tradition alive with hello world."""
     return {"hello": "world"}
 
 
 @get("/game/{gameid:str}")
-def list_players(gameid: str) -> dict[str, list[str]]:
+def list_players_game(gameid: str) -> dict[str, list[str]]:
     """Returns the players in a game."""
-    return {"players": [""]}
+    return {"players": [gameid]}
 
 
 @get("/players")
@@ -30,4 +30,4 @@ def list_players() -> dict[str, list[str]]:
     return {"players": [""]}
 
 
-app = Starlite(route_handlers=[hello_world,list_players])
+app = Starlite(route_handlers=[hello_world,list_players,list_players_game])

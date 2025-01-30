@@ -33,6 +33,7 @@ import random
 import logging
 from uuid import UUID
 from itertools import chain
+from sqlite3 import Connection
 
 from classes import *
 
@@ -82,7 +83,7 @@ players and games.
 ####################
 
 
-def initialize_db_and_tables(con) -> None:
+def initialize_db_and_tables(con: Connection) -> None:
     """
     Creates the database if there isn't one already
     and adds the appropriate tables etc.
@@ -94,7 +95,7 @@ def initialize_db_and_tables(con) -> None:
     logger.info("Server started. Checking tables.")
 
     req_tables_and_queries = {
-        "games": """CREATE TABLE games(
+        "games": """CREATE TABLE IF NOT EXISTS games(
         gameID TEXT,
         gameState TEXT,
         tableContents TEXT,
@@ -109,7 +110,7 @@ def initialize_db_and_tables(con) -> None:
         # the sets and runs on the table
         # and the pool of remaning tiles
 
-        "users": """CREATE TABLE users(
+        "users": """CREATE TABLE IF NOT EXISTS users(
         userID TEXT,
         userName TEXT,
         email TEXT,
@@ -119,24 +120,23 @@ def initialize_db_and_tables(con) -> None:
         lastLogon TEXT,
         PRIMARY KEY(userID DESC));""",
 
-        "ingame": """CREATE TABLE ingame(
-        gameID INTEGER,
-        playerID TEXT,
+        "ingame": """CREATE TABLE IF NOT EXISTS ingame(
+        gameID TEXT,
+        userID TEXT,
         hand TEXT,
         turnNumber INT,
         FOREIGN KEY(gameID) REFERENCES games(gameID),
-        FOREIGN KEY(playerID) REFERENCES users(userID));""",
+        FOREIGN KEY(userID) REFERENCES users(userID));""",
     }
 
     cur = con.cursor()
     tables_res = cur.execute("SELECT name FROM sqlite_master")
 
-    # "flattening" the table using itertools
-    # and chain.from_terable. This makes it all
-    # into a single list of items
+    # "flattening" the 2-dimensional
+    # list of tables so it's just a
+    # 1D list of tables
     tables = tables_res.fetchall()
-    temp_chain = chain.from_iterable(tables)
-    tables = list(temp_chain)
+    tables = [table[0] for table in tables]
 
     # NOTE:
     # this will generate a lot of logs if it's ran every time
@@ -175,7 +175,7 @@ def valid_uuid(id: str) -> bool:
     return True
 
 
-def insert_into_table(con, table_name, data: list | str) -> None:
+def insert_into_table(con: Connection, table_name, data: list | str) -> None:
     """
     This should be called when a user is created,
     for example. Data should be either a string or list
@@ -204,7 +204,7 @@ def insert_into_table(con, table_name, data: list | str) -> None:
 
 # TODO: potentially modify this to have a bit more of
 # a universal method like the one below
-def get_game_data(con, gameID: int) -> tuple:
+def get_game_data(con: Connection, gameID: int) -> tuple:
     """
     Gets data for the specified game ID.
     Basically pre-generates a nice command for you
@@ -227,50 +227,56 @@ def get_game_data(con, gameID: int) -> tuple:
     return game_data
 
 
-def _get_game_or_player(con, ID: str | int) -> list | None:
+def _get_game_or_player(con: Connection, ID: str, get_games: bool) -> list | None:
     """
     A kind of "internal" method that calls similar code
     regarding the join table "ingame". This consolidates the two
     functions into one instead of writing the code twice.
 
-    If a player ID is given, it returns the games they're in.
-
-    If a game ID is given, it returns the players in that game.
+    "games" is a bool meaning "get games a player is in"
     """
     if not valid_uuid(ID):
         return None
 
     cur = con.cursor()
 
-    query = f"SELECT gameID,playerID FROM ingame WHERE gameID == '{ID}' OR playerID == '{ID}';"
+    if get_games:
+        # get the games a player is in
+        query = f"SELECT gameID FROM ingame WHERE playerID == '{ID}';"
+    else:
+        # get the players in a game
+        query = f"SELECT playerID FROM ingame WHERE gameID == '{ID}';"
 
     games_data_res = cur.execute(query)
     games_data = games_data_res.fetchall()
     games_data_res.close()
     cur.close()
 
+    # "flattening" the table using itertools
+    # and chain.from_terable. This makes it all
+    # into a single list of items
     temp_chain = chain.from_iterable(games_data)
     games_data = list(temp_chain)
 
     return games_data
 
 
-def get_games_with_player(con, playerID: str) -> list:
+def get_games_with_player(con: Connection, playerID: str) -> list | None:
     """
     Gets the game IDs from the join table "ingame".
 
-    In other words: gets the games a player is in.
+    In other words: gets all the games a player is in.
     """
-    return _get_game_or_player(con, playerID)
+    return _get_game_or_player(con, playerID, True)
 
 
-def get_players_in_game(con, gameID: int) -> list:
+def get_players_in_game(con: Connection, gameID: int) -> list | None:
     """
     Gets the player IDs from the join table "ingame".
 
     In other words: gets all the players in a game.
     """
-    return _get_game_or_player(con, gameID)
+    return _get_game_or_player(con, gameID, False)
 
 
 def shuffle(max_players: int = 4, human_readable: bool = False) -> tuple:

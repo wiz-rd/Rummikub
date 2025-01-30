@@ -1,5 +1,6 @@
-from dataclasses import dataclass, field
+import json
 from uuid import UUID, uuid4
+from dataclasses import dataclass, field
 
 
 ######################
@@ -58,6 +59,11 @@ COLORS = {
     "RED": "#FF2E17",
 }
 
+GROUP_TYPES = [
+    "RUN",
+    "SET",
+]
+
 
 ###########
 # CLASSES #
@@ -104,15 +110,18 @@ class Player:
 @to_json
 class Hand:
     """
-    The hands and of each player. This should be stored with
-    the table and NOT with the player.
+    The hands and of each player.
 
-    NOTE: The score is stored
-    here as it's directly dependant on the hand and storing it
-    with the player means in the DB, scores would be stored with players,
-    which is undesirable
+    Essentially a helper class to
+    calculate score and store Tiles
+    in a list.
+
+    Scores WILL be calculated client
+    side for displaying, but they should
+    validate with the server for the final
+    result (and intermittently) to avoid
+    client manipulation.
     """
-    owner_id: UUID
     score: int = 0
     tiles: list[Tile] = field(default_factory=list)
 
@@ -123,8 +132,7 @@ class Hand:
         does count the jokers as negative.
 
         Optimally, should only be called at the end of
-        a game, but in case we decide to call it early,
-        that's always an option.
+        a game, but it's possible to call it early.
         """
         self.score = 0
 
@@ -145,10 +153,44 @@ class Group:
     """
     tiles: list[Tile] = field(default_factory=list)
 
+    def _valid(self) -> bool:
+        """
+        Returns a bool of whether
+        or not this group is valid.
+        """
+        # if there are two few tiles,
+        # it's already invalid
+        if len(self.tiles) < 3:
+            return False
+
+        colors = list()
+        self.is_set = True
+        for tile in self.tiles:
+            # check to see if there is
+            # a tile of the same color
+            # in the run - not allowed
+            # if it's supposed to be a set
+            try:
+                colors.index(tile.color)
+            except ValueError:
+                # this is only suspected
+                # and will need to be confirmed
+                self.is_set = False
+
+            colors.append(tile.color)
+
+    def __post_init__(self):
+        """
+        Upon creation of the Group,
+        validate it.
+        """
+        if not self._valid():
+            raise ValueError("The group is not a valid set or run!")
+
     # # this value is purely for cosmetic purposes,
     # # but potentially we can use it for another scoring
     # # type at a later date
-    # owner_id: str
+    # owner_id: UUID
 
 
 @dataclass
@@ -178,7 +220,53 @@ class IngameRow:
     """
     game_id: UUID
     user_id: UUID
-    hand: Hand
+    hand: Hand | dict | str
+    turnNumber: int
+
+    def __post_init__(self):
+        """
+        Ran at the end of __init__
+        of a dataclass. I'll use this
+        to format the hand attribute
+        automatically.
+        """
+        # checking for hand's type
+        if isinstance(self.hand, Hand):
+            pass
+        elif isinstance(self.hand, dict):
+            # if it's a dict, convert it
+            # to a Hand
+            self.set_hand(self.hand)
+        elif isinstance(self.hand, str):
+            # if it's a str, convert it to
+            # a dict and then a Hand
+            self.set_hand(json.loads(self.hand))
+        else:
+            # if it's none of them,
+            # raise an issue
+            raise ValueError(f"Hand value must be of type dict, str, or Hand.")
+
+        # if it's any of the accepted types
+        return
+
+    def set_hand(self, d: dict) -> Hand:
+        """
+        Converts a (properly formatted) dictionary
+        to a Hand object. Stores the Hand as
+        self.hand and returns the Hand generated.
+        """
+        h = Hand()
+        for key in d:
+            # set the attribute of the
+            # hand the key of the dictionary
+            # ----
+            # e.g. if the dictionary has the key
+            # of "score", set the score
+            # of h = to the value stored in d
+            setattr(h, key, d[key])
+
+        self.hand = h
+        return h
 
 
 @dataclass
@@ -234,41 +322,40 @@ class Game:
         if self.id is None:
             self.id = uuid4().hex
 
-    def initialize(self, already_initialized: bool):
+    def initialize(self):
         """
         Initializes the game by performing all calculations,
         determining how many tiles to use, etc.
         """
-        if not already_initialized:
-                # clamp the max player count between 4 and 6
-                if self.max_players < MIN_POSSIBLE_PLAYERS or self.max_players > MAX_POSSIBLE_PLAYERS:
-                    # this should be caught on the frontend, but in case it's not
-                    raise ValueError(f"Max player count must be between {MIN_POSSIBLE_PLAYERS} and {MAX_POSSIBLE_PLAYERS} inclusive.")
+        # clamp the max player count between 4 and 6
+        if self.max_players < MIN_POSSIBLE_PLAYERS or self.max_players > MAX_POSSIBLE_PLAYERS:
+            # this should be caught on the frontend, but in case it's not
+            raise ValueError(f"Max player count must be between {MIN_POSSIBLE_PLAYERS} and {MAX_POSSIBLE_PLAYERS} inclusive.")
 
-                # automatically set the joker count
-                if self.joker_count < 0:
-                    self.joker_count: int = 2 if self.max_players < 5 else 4
+        # automatically set the joker count
+        if self.joker_count < 0:
+            self.joker_count: int = 2 if self.max_players < 5 else 4
 
-                # set_count is:
-                # the amount of set,
-                # min to max numbers,
-                # in four colors
+        # set_count is:
+        # the amount of set,
+        # min to max numbers,
+        # in four colors
 
-                # this SEEMS like a magic number, but basically,
-                # the number needs to be divisible by 4, because
-                # there are four colors in a game.
+        # this SEEMS like a magic number, but basically,
+        # the number needs to be divisible by 4, because
+        # there are four colors in a game.
 
-                # so to make the tile count appropriate to the amount of players
-                # (which the tile count should be tiered to reflect), but not have
-                # only a portion of the colors, you need either 2 sets of all colors
-                # (8 total sets) or 3 sets of all colors (12 total sets of 1 - 13, if color is ignored)
-                set_count = 8 if self.max_players < 5 else 12
+        # so to make the tile count appropriate to the amount of players
+        # (which the tile count should be tiered to reflect), but not have
+        # only a portion of the colors, you need either 2 sets of all colors
+        # (8 total sets) or 3 sets of all colors (12 total sets of 1 - 13, if color is ignored)
+        set_count = 8 if self.max_players < 5 else 12
 
-                # 4 players have 8 sets of tiles ((2 groups of all 4 colors) = 8 groups numbered 1-13), and 5 players and up have 12 sets
-                self.expected_tile_count: int = set_count * (self.max_tile - self.min_tile + 1) + self.joker_count
+        # 4 players have 8 sets of tiles ((2 groups of all 4 colors) = 8 groups numbered 1-13), and 5 players and up have 12 sets
+        self.expected_tile_count: int = set_count * (self.max_tile - self.min_tile + 1) + self.joker_count
 
-                if self.expected_tile_count > MAX_TILE_COUNT:
-                    raise ValueError(f"The tile count {self.expected_tile_count} is higher than the maximum count of {MAX_TILE_COUNT}.")
+        if self.expected_tile_count > MAX_TILE_COUNT:
+            raise ValueError(f"The tile count {self.expected_tile_count} is higher than the maximum count of {MAX_TILE_COUNT}.")
 
     def get_gamedata(self) -> str:
         """

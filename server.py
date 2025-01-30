@@ -31,9 +31,12 @@ con = sqlite3.connect(DATA_DB)
 initialize_db_and_tables(con)
 
 
+# print(get_players_in_game(con, "8dfd006c79dd4eb681079fe120d8d522"))
+# exit()
+
 # TODO: delete testing data
-game = Game()
-game.initialize(False)
+game = Game(id="8dfd006c79dd4eb681079fe120d8d522")
+game.initialize()
 
 insert_into_table(
     con,

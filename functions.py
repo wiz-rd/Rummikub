@@ -204,11 +204,13 @@ def insert_into_table(con: Connection, table_name, data: list | str) -> None:
 
 # TODO: potentially modify this to have a bit more of
 # a universal method like the one below
-def get_game_data(con: Connection, gameID: int) -> tuple:
+def get_game_data(con: Connection, gameID: UUID) -> tuple:
     """
     Gets data for the specified game ID.
     Basically pre-generates a nice command for you
     to automatically grab the specified game.
+
+    Returns: game_data, columns
     """
     # if the ID is suspicious...
     if not valid_uuid(gameID):
@@ -224,7 +226,9 @@ def get_game_data(con: Connection, gameID: int) -> tuple:
     game_data_res.close()
     cur.close()
 
-    return game_data
+    columns = [item[0] for item in game_data_res.description]
+
+    return game_data, columns
 
 
 def _get_game_or_player(con: Connection, ID: str, get_games: bool) -> list | None:

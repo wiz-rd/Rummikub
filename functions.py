@@ -98,6 +98,7 @@ def initialize_db_and_tables(con: Connection) -> None:
         "games": """CREATE TABLE IF NOT EXISTS games(
         gameID TEXT,
         gameState TEXT,
+        lastActive TEXT,
         tableContents TEXT,
         currentPlayerTurn TEXT,
         gameData TEXT,

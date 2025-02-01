@@ -1,5 +1,6 @@
 import json
 from uuid import UUID, uuid4
+from datetime import datetime
 from dataclasses import dataclass, field
 
 
@@ -288,6 +289,14 @@ class Game:
 
     game_state: str = "PREGAME"
     table: Table = field(default_factory=Table)
+    
+    # should be used to delete the game if it hasn't
+    # seen any activity in over x amount of days.
+    # I'll probably do 3 days for PREGAME games
+    # and 10 days for ONGOING games.
+    # I don't know if I'll delete ENDED games yet
+    # as I may just archive them.
+    last_active: str = str(datetime.date(datetime.now()))
 
 
     # ----------------------------------------------

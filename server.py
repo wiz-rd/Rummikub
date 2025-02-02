@@ -113,6 +113,9 @@ class GameController(Controller):
         # the game does not exist; return a 404
         if data is None:
             raise HTTPException(status_code=404, detail="There is no game with that ID.")
+        elif columns is None:
+            logger.critical("Game data received from database is not None but columns returns None.")
+            raise HTTPException(status_code=500, detail="There seems to be an issue with the database. Code: game-columns")
 
         # preparing a dictionary so the
         # data sent to the client is more
@@ -139,7 +142,7 @@ async def base_route() -> dict[str, str]:
     Returns a simply success message indicating the
     API/server is functioning properly.
     """
-    return {"reply": "success"}
+    return {"status_code": 200, "detail": "The API is up and running."}
 
 # @get("/game/{game_id:str}")
 # async def game_data(game_id: str) -> dict[str, str]:

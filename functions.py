@@ -216,7 +216,7 @@ def get_game_data(con: Connection, gameID: UUID) -> tuple:
     # if the ID is suspicious...
     if not valid_uuid(gameID):
         # return a simple "nothing"
-        return None
+        return None, None
 
     cur = con.cursor()
 

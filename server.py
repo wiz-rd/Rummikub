@@ -42,29 +42,6 @@ con = sqlite3.connect(DATA_DB)
 initialize_db_and_tables(con)
 
 
-# print(get_players_in_game(con, "8dfd006c79dd4eb681079fe120d8d522"))
-# exit()
-
-# TODO: delete testing data
-game = Game(id="8dfd006c79dd4eb681079fe120d8d522")
-game.initialize()
-
-# insert_into_table(
-#     con,
-#     "games",
-#     [
-#         game.id,
-#         game.game_state,
-#         game.table.to_json(),
-#         game.current_player_turn,
-#         game.get_gamedata()
-#     ]
-# )
-
-print(f"GameID - {game.id}")
-print(f"Expected game url - http://localhost:8000/game/{game.id}")
-
-
 # TODO: implement OAuth or something
 # similar for users.
 def authenticate_player() -> bool:
@@ -75,9 +52,9 @@ def authenticate_player() -> bool:
     return True
 
 
-##########
-# ROUTES #
-##########
+##########################
+# ROUTES AND CONTROLLERS #
+##########################
 
 
 class GameController(Controller):
@@ -94,17 +71,31 @@ class GameController(Controller):
         For the time being, this will
         simply create a game when asked to.
         """
+        # TODO: make sure this ability
+        # to create games at will
+        # isn't just open to the internet
+        if not authenticate_player():
+            return
+
+        # create game here
         game = Game()
-        # TODO: add the game to the database here
-        # and handle custom settings if the client
-        # adds them here as well. For the time being,
+
+        # then, add it to the database
+        insert_into_table(
+            con=con,
+            table_name="games",
+            data=game.db_list(),
+        )
+
+        # TODO: handle custom settings if the client
+        # adds them here? For the time being,
         # I'll just make a default game everytime this
         # url is loaded by a client and will respond
         # with data about the game.
         return game
 
     @get(path="/{game_id:str}")
-    async def get_game(self, game_id: str) -> Game:
+    async def get_game(self, game_id: str) -> dict:
         """
         Returns most information about a game,
         should the user have the right permissions.
@@ -119,6 +110,8 @@ class GameController(Controller):
 
         # if the user isn't authenticated,
         # avoid giving them any information
+        # to limit the damage of DoS and other
+        # types of attacks.
         # TODO: Implement this.
         if not authenticate_player():
             return
@@ -148,8 +141,34 @@ class GameController(Controller):
             except JSONDecodeError:
                 dictionary[cl] = data[i]
 
+        # NOTE: DELETES THE POOL
+        # the client should not see
+        # what tiles remain, so
+        # this removes them from the dict
+        # before sending it out.
+        del dictionary["tableContents"]["pool"]
+
         return dictionary
 
+
+    # TODO NOTE: Should I have /join/?
+    # this IS a patch request, after all...
+    # most likely, yes, to be distinct
+    # from patch requests for a game where
+    # someone is making a move in game.
+    @patch(path="/join/{game_id:str}")
+    async def join_game(self, game_id: str) -> dict:
+        """
+        Attempts to let a player join a game.
+        """
+        current_game_players = get_players_in_game(
+            con=con,
+            gameID=game_id
+        )
+
+        # TODO: identify player UUID via OAuth
+
+        return current_game_players
 
 
 @get("/")
@@ -179,3 +198,5 @@ app = Starlite(
     # csrf_config=csrf_conf,
     # middleware=[rate_limit.middleware]
 )
+
+app.logger = logger

@@ -39,7 +39,7 @@ def to_json(cls):
         # prefers them to be double quotes
         return str(self.__dict__).replace("'", '"')
     
-    cls.to_json = new_str
+    cls.__repr__ = new_str
     return cls
 
 
@@ -272,7 +272,14 @@ class IngameRow:
 
 @dataclass
 @to_json
-class GameData:
+class GameSettings:
+    """
+    Create custom settings for a game.
+
+    I'm unsure if I'll expose this to clients
+    yet (if ever) but I figured I would
+    implement a system for it just in case.
+    """
     # time limit for turns in seconds
     # zero should be infinite
     turn_time_limit: int = 60
@@ -291,57 +298,15 @@ class GameData:
     max_tile: int = 13
     min_tile: int = 1
 
-
-@dataclass
-@to_json
-class Game:
-    """
-    A class that stores statistics and values
-    about the game as a whole.
-    """
-
-    #
-    # these should be referenced individually
-    # and stored in columns
-    #
-    id: UUID = None
-
-    # stores whose turn it is in the game currently
-    current_player_turn: UUID = None
-
-    game_state: str = "PREGAME"
-    table: Table = field(default_factory=Table)
-
-    # should be used to delete the game if it hasn't
-    # seen any activity in over x amount of days.
-    # I'll probably do 3 days for PREGAME games
-    # and 10 days for ONGOING games.
-    # I don't know if I'll delete ENDED games yet
-    # as I may just archive them.
-    last_active: str = str(datetime.date(datetime.now()))
-
-    # the user can pass a dictionary
-    # if they'd like custom game data
-    game_data: GameData = GameData()
-
-    def __post_init__(self):
-        """Have to generate a default uuid manually due to psuedo-randomness."""
-        if self.id is None:
-            self.id = uuid4().hex
-
     def initialize(self):
-        """
-        Initializes the game by performing all calculations,
-        determining how many tiles to use, etc.
-        """
         # clamp the max player count between 4 and 6
-        if self.game_data.max_players < MIN_POSSIBLE_PLAYERS or self.game_data.max_players > MAX_POSSIBLE_PLAYERS:
+        if self.max_players < MIN_POSSIBLE_PLAYERS or self.max_players > MAX_POSSIBLE_PLAYERS:
             # this should be caught on the frontend, but in case it's not
             raise ValueError(f"Max player count must be between {MIN_POSSIBLE_PLAYERS} and {MAX_POSSIBLE_PLAYERS} inclusive.")
 
         # automatically set the joker count
-        if self.game_data.joker_count < 0:
-            self.game_data.joker_count = 2 if self.game_data.max_players < 5 else 4
+        if self.joker_count < 0:
+            self.joker_count = 2 if self.max_players < 5 else 4
 
         # set_count is:
         # the amount of set,
@@ -356,10 +321,85 @@ class Game:
         # (which the tile count should be tiered to reflect), but not have
         # only a portion of the colors, you need either 2 sets of all colors
         # (8 total sets) or 3 sets of all colors (12 total sets of 1 - 13, if color is ignored)
-        set_count = 8 if self.game_data.max_players < 5 else 12
+        set_count = 8 if self.max_players < 5 else 12
 
         # 4 players have 8 sets of tiles ((2 groups of all 4 colors) = 8 groups numbered 1-13), and 5 players and up have 12 sets
-        self.expected_tile_count: int = set_count * (self.game_data.max_tile - self.game_data.min_tile + 1) + self.game_data.joker_count
+        self.expected_tile_count: int = set_count * (self.max_tile - self.min_tile + 1) + self.joker_count
 
         if self.expected_tile_count > MAX_TILE_COUNT:
             raise ValueError(f"The tile count {self.expected_tile_count} is higher than the maximum count of {MAX_TILE_COUNT}.")
+
+
+@dataclass
+@to_json
+class Game:
+    """
+    A class that stores statistics and values
+    about the game as a whole.
+
+    This can be created with particular settings
+    by passing in a GameSettings object.
+    """
+    # these should be referenced individually
+    # and stored in columns
+    id: UUID = None
+
+    # stores whose turn it is in the game currently
+    current_player_turn: UUID = 0
+
+    game_state: str = "PREGAME"
+    table: Table = field(default_factory=Table)
+
+    # should be used to delete the game if it hasn't
+    # seen any activity in over x amount of days.
+    # I'll probably do 3 days for PREGAME games
+    # and 10 days for ONGOING games.
+    # I don't know if I'll delete ENDED games yet
+    # as I may just archive them.
+    last_active: str = str(datetime.date(datetime.now()))
+
+    # the user can pass a GameSettings obj
+    # if they'd like custom game data
+    game_data: GameSettings = GameSettings()
+
+    def __post_init__(self):
+        """
+        Have to generate a default uuid manually due to psuedo-randomness.
+
+        Additionally, initializes the GameSettings
+        to calculate tile count and the like.
+        """
+        if self.id is None:
+            self.id = uuid4().hex
+
+        self.game_data.initialize()
+
+    def db_list(self) -> list[str]:
+        """
+        Prepares a list that reflects the
+        ER diagram for insertion into
+        the database.
+        """
+
+        return [
+            self.id,
+            self.game_state,
+            self.last_active,
+            self.current_player_turn,
+            self.table,
+            self.game_data
+        ]
+
+    def start(self) -> bool:
+        """
+        Starts the game.
+
+        Doles out hands to players,
+        prepares the pool, and
+        determines player order.
+
+        Returns a bool of if the game
+        was successfully started or not.
+        """
+        # TODO: NOT PASS
+        pass

@@ -32,7 +32,6 @@ import os
 import random
 import logging
 from uuid import UUID
-from itertools import chain
 from sqlite3 import Connection
 
 from classes import *
@@ -99,8 +98,8 @@ def initialize_db_and_tables(con: Connection) -> None:
         gameID TEXT,
         gameState TEXT,
         lastActive TEXT,
-        tableContents TEXT,
         currentPlayerTurn TEXT,
+        tableContents TEXT,
         gameData TEXT,
         PRIMARY KEY(gameID DESC));""",
         # TODO: Should I store current player uuid or position?
@@ -124,8 +123,8 @@ def initialize_db_and_tables(con: Connection) -> None:
         "ingame": """CREATE TABLE IF NOT EXISTS ingame(
         gameID TEXT,
         userID TEXT,
-        hand TEXT,
         turnNumber INT,
+        hand TEXT,
         FOREIGN KEY(gameID) REFERENCES games(gameID),
         FOREIGN KEY(userID) REFERENCES users(userID));""",
     }
@@ -247,35 +246,32 @@ def _get_game_or_player(con: Connection, ID: str, get_games: bool) -> list | Non
 
     if get_games:
         # get the games a player is in
-        query = f"SELECT gameID FROM ingame WHERE playerID == '{ID}';"
+        query = f"SELECT gameID FROM ingame WHERE userID == '{ID}';"
     else:
         # get the players in a game
-        query = f"SELECT playerID FROM ingame WHERE gameID == '{ID}';"
+        query = f"SELECT userID FROM ingame WHERE gameID == '{ID}';"
 
     games_data_res = cur.execute(query)
     games_data = games_data_res.fetchall()
     games_data_res.close()
     cur.close()
 
-    # "flattening" the table using itertools
-    # and chain.from_terable. This makes it all
-    # into a single list of items
-    temp_chain = chain.from_iterable(games_data)
-    games_data = list(temp_chain)
+    # "flattening" the table
+    users = [item[0] for item in games_data]
 
-    return games_data
+    return users
 
 
-def get_games_with_player(con: Connection, playerID: str) -> list | None:
+def get_games_with_player(con: Connection, userID: str) -> list | None:
     """
     Gets the game IDs from the join table "ingame".
 
     In other words: gets all the games a player is in.
     """
-    return _get_game_or_player(con, playerID, True)
+    return _get_game_or_player(con, userID, True)
 
 
-def get_players_in_game(con: Connection, gameID: int) -> list | None:
+def get_players_in_game(con: Connection, gameID: str) -> list | None:
     """
     Gets the player IDs from the join table "ingame".
 

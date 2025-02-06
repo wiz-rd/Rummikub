@@ -3,6 +3,8 @@ from uuid import UUID, uuid4
 from datetime import datetime
 from dataclasses import dataclass, field
 
+from litestar.dto import DTOConfig, DataclassDTO
+
 
 ######################
 # ABSOLUTE VARIABLES #
@@ -73,6 +75,33 @@ GROUP_TYPES = [
 
 @dataclass
 @to_json
+class User:
+    """
+    A player with some data and scores.
+    """
+    id: UUID = None
+    username: str = ""
+    last_login: str = ""
+    wins: int = 0
+    losses: int = 0
+
+    def __post_init__(self):
+        """Have to generate a default uuid manually due to psuedo-randomness."""
+        if self.id is None:
+            self.id = uuid4().hex
+
+
+class PartialUserDTO(DataclassDTO[User]):
+    """
+    A simple DTO (data-transfer object) that
+    limits what aspects of a user are exposed
+    to the API.
+    """
+    config = DTOConfig(exclude={"id", "last_login"}, partial=True)
+
+
+@dataclass
+@to_json
 class Tile:
     """
     Stores the number and color of a tile.
@@ -83,28 +112,6 @@ class Tile:
     joker: bool = False
     # this could just be the number 0,
     # but a separate flag increases readability a ton.
-
-
-# NOTE: API-exposed, if the person has the right creds
-@dataclass
-@to_json
-class Player:
-    """
-    Players, player data, and their scores.
-    """
-    id: UUID = None
-    username: str = ""
-    email: str = ""
-    password: str = ""
-    last_login: str = ""
-    wins: int = 0
-    losses: int = 0
-
-
-    def __post_init__(self):
-        """Have to generate a default uuid manually due to psuedo-randomness."""
-        if self.id is None:
-            self.id = uuid4().hex
 
 
 @dataclass

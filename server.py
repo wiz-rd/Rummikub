@@ -13,18 +13,25 @@ for a Linux machine.
 
 # default imports
 import sqlite3
-from uuid import UUID
+from pathlib import Path
 from json import JSONDecodeError
 
-# generic starlite imports
-from starlite import Starlite, HTTPException, MediaType, status_codes, CORSConfig, CSRFConfig
-from starlite.middleware import RateLimitConfig
+# broad litestar imports
+from litestar.connection import Request
+from litestar.logging import LoggingConfig
+from litestar.config.cors import CORSConfig
+from litestar.exceptions import HTTPException
+from litestar import Litestar, MediaType, status_codes
+
+# handling clients and sessions
+from litestar.stores.file import FileStore
+from litestar.middleware.rate_limit import RateLimitConfig
+from litestar.middleware.session.server_side import ServerSideSessionConfig, ServerSideSessionBackend
 
 # controllers and routes
-from starlite.types import Partial
-from starlite.router import Router
-from starlite.controller import Controller
-from starlite.handlers import get, post, patch, delete
+from litestar.router import Router
+from litestar.controller import Controller
+from litestar.handlers import get, post, patch, delete
 
 # custom imports
 from functions import *
@@ -34,6 +41,32 @@ NOTE: make sure to close each connection after it's
 served its purpose. This should hopefully save on resources.
 """
 
+###################
+# CONST VARIABLES #
+###################
+
+DATA_FOLDER = os.path.normpath(os.path.abspath("./data"))
+DATA_DB = os.path.join(DATA_FOLDER, "data.db")
+SESSION_FOLDER = os.path.join(DATA_FOLDER, "sessions")
+# create all folders if they don't exist already.
+os.makedirs(SESSION_FOLDER, exist_ok=True)
+
+SESSION_CONFIG = ServerSideSessionConfig(
+    renew_on_access=True,
+    samesite="none",
+    max_age=60 * 30,  # 60 seconds times 30 (minutes)
+)
+
+SESSION_BACKEND = ServerSideSessionBackend(SESSION_CONFIG)
+
+lgr = LoggingConfig(
+    root={"level": "INFO", "handlers": ["queue_listener"]},
+    formatters={
+        "standard": {"format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"}
+    },
+    log_exceptions="always",
+)
+
 #############################
 # INITIALIZING THE DATABASE #
 #############################
@@ -42,13 +75,27 @@ con = sqlite3.connect(DATA_DB)
 initialize_db_and_tables(con)
 
 
-# TODO: implement OAuth or something
-# similar for users.
-def authenticate_player() -> bool:
+###############################
+# AUTHENTICATION AND SESSIONS #
+###############################
+
+
+# TODO: probably delete this
+def is_authenticated(req: Request):
     """
-    Verifies the user is who they
-    claim to be.
+    Returns whether or not the user
+    has a session ID, a simple authentication.
+
+    This, most likely, is completely
+    redundant because sessions are created
+    automatically if the user doesn't already
+    have one, so...
+
+    But I'll leave it for now, both for
+    future use and just as an extra precaution.
     """
+    if not req.session:
+        return False
     return True
 
 
@@ -58,10 +105,15 @@ def authenticate_player() -> bool:
 
 
 class GameController(Controller):
+    """
+    A simple controller for Games.
+
+    Used to create and get data for Games.
+    """
     path = "/game"
 
     @post()
-    async def create_game(self) -> Game:
+    async def create_game(self, request: Request) -> Game:
         """
         Creates a game in the database.
 
@@ -74,7 +126,7 @@ class GameController(Controller):
         # TODO: make sure this ability
         # to create games at will
         # isn't just open to the internet
-        if not authenticate_player():
+        if not is_authenticated(request):
             return
 
         # create game here
@@ -95,25 +147,17 @@ class GameController(Controller):
         return game
 
     @get(path="/{game_id:str}")
-    async def get_game(self, game_id: str) -> dict:
+    async def get_game(self, request: Request, game_id: str) -> Game:
         """
         Returns most information about a game,
         should the user have the right permissions.
         """
-        # TODO: I don't know how to handle sessions.
-        # I should probably use Google OAuth
-        # or something similar? I'm really unsure.
-        # For the time being, I'll return full data
-        # about a game just so I can test the API
-        # and database in tandem.
-        # Another alternative is Passport.js
-
         # if the user isn't authenticated,
         # avoid giving them any information
         # to limit the damage of DoS and other
         # types of attacks.
         # TODO: Implement this.
-        if not authenticate_player():
+        if not is_authenticated(request):
             return
 
         data, columns = get_game_data(con, game_id)
@@ -152,11 +196,10 @@ class GameController(Controller):
 
 
     # TODO NOTE: Should I have /join/?
-    # this IS a patch request, after all...
     # most likely, yes, to be distinct
-    # from patch requests for a game where
+    # from patch requests for where
     # someone is making a move in game.
-    @patch(path="/join/{game_id:str}")
+    @post(path="/join/{game_id:str}")
     async def join_game(self, game_id: str) -> dict:
         """
         Attempts to let a player join a game.
@@ -171,8 +214,37 @@ class GameController(Controller):
         return current_game_players
 
 
+class UserController(Controller):
+    """
+    A simple controller for users
+    to create and get their own data
+    based on sessions.
+    """
+    path = "/user"
+
+
+    @post("/{username:str}")
+    async def set_username(self, request: Request, username: str) -> str:
+        try:
+            session = request.session
+            session["username"] = username
+            return f"Username {username} not saved in session."
+        except AttributeError as e:
+            return str(e)
+
+    @get("/")
+    async def get_username(self, request: Request) -> str:
+        try:
+            session = request.session
+        except AttributeError:
+            return "You do not have a username."
+        username = session.get("username", None)
+        if username:
+            return f"Your username is {username}"
+
+
 @get("/")
-async def base_route() -> dict[str, str]:
+async def api_base_route() -> dict[str, str]:
     """
     Returns a simple success message indicating the
     API/server is functioning properly.
@@ -185,18 +257,15 @@ async def base_route() -> dict[str, str]:
 ################
 
 URL = "http://localhost/"
-SECRET = "temporary-secret"
 cors_config = CORSConfig(allow_origins=[URL])
-csrf_conf = CSRFConfig(secret=SECRET)
 rate_limit = RateLimitConfig(rate_limit=("second", 30))
 
-api_base = Router(path="/api", route_handlers=[base_route,GameController])
+api_base = Router(path="/api", route_handlers=[api_base_route,GameController,UserController])
 
-app = Starlite(
+app = Litestar(
     route_handlers=[api_base],
+    stores={"sessions": FileStore(path=Path(SESSION_FOLDER))},
+    middleware=[rate_limit.middleware, SESSION_CONFIG.middleware],
+    logging_config=lgr,
     # cors_config=cors_config,
-    # csrf_config=csrf_conf,
-    # middleware=[rate_limit.middleware]
 )
-
-app.logger = logger

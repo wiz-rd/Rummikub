@@ -37,9 +37,6 @@ from sqlite3 import Connection
 from classes import *
 
 
-DATA_FOLDER = os.path.normpath(os.path.abspath("./data"))
-# NOTE: please see above regarding credentials
-DATA_DB = os.path.join(DATA_FOLDER, "data.db")
 LOGGING_FORMAT = "%(asctime)s \t %(levelname)s \t [%(filename)s] -> %(message)s"
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="server.log", level=logging.INFO, format=LOGGING_FORMAT)

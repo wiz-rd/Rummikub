@@ -104,10 +104,11 @@ def initialize_db_and_tables(con: Connection) -> None:
         # PRIMARY KEY(userID DESC));""",
 
         "ingame": """CREATE TABLE IF NOT EXISTS ingame(
+        userID TEXT,
         gameID TEXT,
-        userID TEXT UNIQUE,
         turnNumber INT,
         hand TEXT,
+        PRIMARY KEY(userID DESC),
         FOREIGN KEY(gameID) REFERENCES games(gameID));""",
     }
 

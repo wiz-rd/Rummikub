@@ -46,6 +46,11 @@ served its purpose. This should hopefully save on resources.
 # CONST VARIABLES #
 ###################
 
+UNAUTHORIZED_RESPONSE = {
+    "status_code": 401,
+    "detail": "User is not authorized."
+}
+
 DATA_FOLDER = os.path.normpath(os.path.abspath("./data"))
 DATA_DB = os.path.join(DATA_FOLDER, "data.db")
 SESSION_FOLDER = os.path.join(DATA_FOLDER, "sessions")
@@ -54,11 +59,11 @@ os.makedirs(SESSION_FOLDER, exist_ok=True)
 
 SESSION_CONFIG = ServerSideSessionConfig(
     renew_on_access=True,
-    samesite="none",
     max_age=60 * 30,  # 60 seconds times 30 (minutes)
 )
 
 SESSION_BACKEND = ServerSideSessionBackend(SESSION_CONFIG)
+SESSION_FILE_STORE = FileStore(path=Path(SESSION_FOLDER))
 
 lgr = LoggingConfig(
     root={"level": "INFO", "handlers": ["queue_listener"]},
@@ -115,7 +120,7 @@ class GameController(Controller):
     path = "/game"
 
     @post()
-    async def create_game(self, request: Request) -> Game:
+    async def create_game(self, request: Request) -> Game | dict:
         """
         Creates a game in the database.
 
@@ -129,7 +134,7 @@ class GameController(Controller):
         # to create games at will
         # isn't just open to the internet
         if not is_authenticated(request):
-            return
+            return UNAUTHORIZED_RESPONSE
 
         # create game here
         game = Game()
@@ -149,7 +154,7 @@ class GameController(Controller):
         return game
 
     @get(path="/{game_id:str}")
-    async def get_game(self, request: Request, game_id: str) -> Game:
+    async def get_game(self, request: Request, game_id: str) -> Game | dict:
         """
         Returns most information about a game,
         should the user have the right permissions.
@@ -160,7 +165,7 @@ class GameController(Controller):
         # types of attacks.
         # TODO: Implement this.
         if not is_authenticated(request):
-            return
+            return UNAUTHORIZED_RESPONSE
 
         data, columns = get_game_data(con, game_id)
 
@@ -202,18 +207,55 @@ class GameController(Controller):
     # from patch requests for where
     # someone is making a move in game.
     @post(path="/join/{game_id:str}")
-    async def join_game(self, game_id: str) -> dict:
+    async def join_game(self, request: Request, game_id: str) -> dict:
         """
         Attempts to let a player join a game.
         """
+        if not is_authenticated(request):
+            return UNAUTHORIZED_RESPONSE
+
+        does_not_exist = {
+            "status_code": 404,
+            "detail": "That game does not exist."
+        }
+
+        if get_game_data(con, game_id)[0] is None:
+            return does_not_exist
+
+        game_exists: bool = len(get_game_data(con, game_id)[0]) >= 1
+
         current_game_players = get_players_in_game(
             con=con,
             gameID=game_id
         )
 
-        # TODO: identify player UUID via OAuth
-
-        return current_game_players
+        # if the game exists (the database responds with anything)
+        # and if the user is NOT in that game currently, let them join.
+        if game_exists and request.get_session_id() not in current_game_players:
+            insert_into_table(
+                con,
+                "ingame",
+                [
+                    # "userID" in the ER diagram
+                    request.get_session_id(),
+                    game_id,
+                    # this (turnNumber) actually doesn't matter right now
+                    0,
+                    Hand()
+                ]
+            )
+            return {
+                "status_code": 200,
+                "detail": "Success"
+            }
+        elif not game_exists:
+            return does_not_exist
+        else:
+            # otherwise, let them know
+            return {
+                "status_code": 409,
+                "detail": "User is already in game."
+            }
 
 
 class UserController(Controller):
@@ -223,7 +265,6 @@ class UserController(Controller):
     based on sessions.
     """
     path = "/user"
-
 
     # so this is a put becuase
     # the value being changed isn't
@@ -246,20 +287,31 @@ class UserController(Controller):
 
     @get("/")
     async def get_username(self, request: Request) -> dict:
+        """
+        Responds with the username
+        """
+        default =  {
+            "status_code": 418,
+            "detail": "You do not have a username.",
+            "username": "",
+        }
+
         try:
             session = request.session
         except AttributeError:
-            return {
-                "status_code": 418,
-                "detail": "You do not have a username."
-            }
+            # if they don't have a session
+            return default
         # try and grab their username
         username = session.get("username", None)
         if username:
             return {
                 "status_code": 200,
-                "detail": f"Your username is {username}."
+                "detail": "You have a username.",
+                "username": username,
             }
+
+        # if they don't have a username but DO have a session
+        return default
 
 
 @get("/")
@@ -271,6 +323,14 @@ async def api_base_route() -> dict[str, str]:
     return {"status_code": 200, "detail": "The API is up and running."}
 
 
+@get("/clear")
+async def api_clear_sessions() -> None:
+    """
+    Clears sessions that have expired.
+    """
+    await SESSION_FILE_STORE.delete_expired()
+    return
+
 ################
 # SERVER SETUP #
 ################
@@ -279,11 +339,11 @@ URL = "http://localhost/"
 cors_config = CORSConfig(allow_origins=[URL])
 rate_limit = RateLimitConfig(rate_limit=("second", 30))
 
-api_base = Router(path="/api", route_handlers=[api_base_route,GameController,UserController])
+api_base = Router(path="/api", route_handlers=[api_base_route,api_clear_sessions,GameController,UserController])
 
 app = Litestar(
     route_handlers=[api_base],
-    stores={"sessions": FileStore(path=Path(SESSION_FOLDER))},
+    stores={"sessions": SESSION_FILE_STORE},
     middleware=[rate_limit.middleware, SESSION_CONFIG.middleware],
     logging_config=lgr,
     # cors_config=cors_config,

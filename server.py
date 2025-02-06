@@ -12,6 +12,7 @@ for a Linux machine.
 """
 
 # default imports
+import os
 import sqlite3
 from pathlib import Path
 from json import JSONDecodeError
@@ -31,7 +32,7 @@ from litestar.middleware.session.server_side import ServerSideSessionConfig, Ser
 # controllers and routes
 from litestar.router import Router
 from litestar.controller import Controller
-from litestar.handlers import get, post, patch, delete
+from litestar.handlers import get, post, delete, put
 
 # custom imports
 from functions import *
@@ -70,6 +71,7 @@ lgr = LoggingConfig(
 #############################
 # INITIALIZING THE DATABASE #
 #############################
+
 
 con = sqlite3.connect(DATA_DB)
 initialize_db_and_tables(con)
@@ -223,24 +225,41 @@ class UserController(Controller):
     path = "/user"
 
 
-    @post("/{username:str}")
-    async def set_username(self, request: Request, username: str) -> str:
+    # so this is a put becuase
+    # the value being changed isn't
+    # really a "whole object"
+    # AND it's 'idempotent,' meaning
+    # no matter how many times you send
+    # PUT /api/user/gamer, it'll always
+    # result in just "gamer" being your username
+    @put("/{username:str}")
+    async def set_username(self, request: Request, username: str) -> dict:
         try:
             session = request.session
             session["username"] = username
-            return f"Username {username} not saved in session."
-        except AttributeError as e:
-            return str(e)
+            return {
+                "status_code": 200,
+                "detail": f"Your username was successfully set to {username}."
+            }
+        except AttributeError:
+            raise HTTPException(status_code=500, detail="Something went wrong...")
 
     @get("/")
-    async def get_username(self, request: Request) -> str:
+    async def get_username(self, request: Request) -> dict:
         try:
             session = request.session
         except AttributeError:
-            return "You do not have a username."
+            return {
+                "status_code": 418,
+                "detail": "You do not have a username."
+            }
+        # try and grab their username
         username = session.get("username", None)
         if username:
-            return f"Your username is {username}"
+            return {
+                "status_code": 200,
+                "detail": f"Your username is {username}."
+            }
 
 
 @get("/")

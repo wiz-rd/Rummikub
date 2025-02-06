@@ -28,7 +28,6 @@ and there is basically nothing worth defending with a
 crazy password (your stats..?), so that'll be my advice.
 """
 
-import os
 import random
 import logging
 from uuid import UUID
@@ -47,17 +46,7 @@ tables and other contents it'll contain.
 
 ###########
 
-Users Table:
-
-Emails will NOT be used, and likely won't even be collected to avoid being breached.
-It would literally only be a preventative measure for DoS'ing or spamming
-the database. Having a hash of them could prevent making multiple accounts
-with the same email, hence this field.
-
-###########
-
 Games Table:
-
 
 NOTE: the game should be able to be entirely reconstructed
 from an entry in the Games table, one way or another.
@@ -66,11 +55,7 @@ from an entry in the Games table, one way or another.
 
 Ingame Table:
 
-(JOIN TABLE)
-
 NOTE: This table stores WHO is in a game and WHAT games they're in.
-It's a join table to handle a many-to-many relationship between
-players and games.
 """
 
 
@@ -107,23 +92,23 @@ def initialize_db_and_tables(con: Connection) -> None:
         # the sets and runs on the table
         # and the pool of remaning tiles
 
-        "users": """CREATE TABLE IF NOT EXISTS users(
-        userID TEXT,
-        userName TEXT,
-        email TEXT,
-        password TEXT,
-        wins INTEGER,
-        losses INTEGER,
-        lastLogon TEXT,
-        PRIMARY KEY(userID DESC));""",
+        # # rest in peace, users table
+        # "users": """CREATE TABLE IF NOT EXISTS users(
+        # userID TEXT,
+        # userName TEXT,
+        # email TEXT,
+        # password TEXT,
+        # wins INTEGER,
+        # losses INTEGER,
+        # lastLogon TEXT,
+        # PRIMARY KEY(userID DESC));""",
 
         "ingame": """CREATE TABLE IF NOT EXISTS ingame(
         gameID TEXT,
-        userID TEXT,
+        userID TEXT UNIQUE,
         turnNumber INT,
         hand TEXT,
-        FOREIGN KEY(gameID) REFERENCES games(gameID),
-        FOREIGN KEY(userID) REFERENCES users(userID));""",
+        FOREIGN KEY(gameID) REFERENCES games(gameID));""",
     }
 
     cur = con.cursor()
@@ -163,6 +148,11 @@ def valid_uuid(id: str) -> bool:
     try:
         UUID(id, version=4)
     except ValueError:
+        if id.isalnum():
+            # if it's alphanumeric but NOT
+            # a UUID, it's probably a session ID
+            return True
+        # if none of those...
         # seems like someone is trying
         # a SQL injection or fiddling with
         # their client in some way...

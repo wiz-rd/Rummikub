@@ -49,6 +49,7 @@ def to_json(cls):
 # ENUMS #
 #########
 
+
 STATES = [
     "ENDED",
     "ONGOING",
@@ -71,33 +72,6 @@ GROUP_TYPES = [
 ###########
 # CLASSES #
 ###########
-
-
-@dataclass
-@to_json
-class User:
-    """
-    A player with some data and scores.
-    """
-    id: UUID = None
-    username: str = ""
-    last_login: str = ""
-    wins: int = 0
-    losses: int = 0
-
-    def __post_init__(self):
-        """Have to generate a default uuid manually due to psuedo-randomness."""
-        if self.id is None:
-            self.id = uuid4().hex
-
-
-class PartialUserDTO(DataclassDTO[User]):
-    """
-    A simple DTO (data-transfer object) that
-    limits what aspects of a user are exposed
-    to the API.
-    """
-    config = DTOConfig(exclude={"id", "last_login"}, partial=True)
 
 
 @dataclass
@@ -227,7 +201,7 @@ class IngameRow:
     the new player's user ID.
     """
     game_id: UUID
-    user_id: UUID
+    user_id: str
     hand: Hand | dict | str
     turnNumber: int
 

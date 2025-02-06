@@ -108,7 +108,6 @@ def initialize_db_and_tables(con: Connection) -> None:
         gameID TEXT,
         turnNumber INT,
         hand TEXT,
-        PRIMARY KEY(userID DESC),
         FOREIGN KEY(gameID) REFERENCES games(gameID));""",
     }
 

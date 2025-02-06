@@ -87,7 +87,6 @@ initialize_db_and_tables(con)
 ###############################
 
 
-# TODO: probably delete this
 def is_authenticated(req: Request):
     """
     Returns whether or not the user
@@ -202,11 +201,41 @@ class GameController(Controller):
         return dictionary
 
 
-    # TODO NOTE: Should I have /join/?
+    @get(path="/{game_id:str}/players", status_code=200)
+    async def list_players(self, request: Request, game_id: str) -> list | dict:
+        """
+        Responds with a list of players in the specified game.
+        """
+        if not is_authenticated(request):
+            return UNAUTHORIZED_RESPONSE
+
+        player_sessions = get_players_in_game(con, game_id)
+
+        if player_sessions:
+            players = list()
+            for session in player_sessions:
+                # this has multiple steps:
+                # 1. get session contents
+                # 2. convert from bytes to dict
+                # 3. get the username from the dict
+                username = await SESSION_BACKEND.get(session, SESSION_FILE_STORE)
+                try:
+                    username = json.loads(username)["username"]
+                except KeyError:
+                    # if there somehow isn't a username,
+                    # just skip them
+                    # NOTE: keep an eye on this.
+                    continue
+                players.append(username)
+            return players
+        else:
+            return []
+
+    # NOTE: Should I have /join/?
     # most likely, yes, to be distinct
     # from patch requests for where
     # someone is making a move in game.
-    @post(path="/join/{game_id:str}")
+    @post(path="/{game_id:str}/join")
     async def join_game(self, request: Request, game_id: str) -> dict:
         """
         Attempts to let a player join a game.

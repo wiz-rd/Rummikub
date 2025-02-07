@@ -189,6 +189,22 @@ def insert_into_table(con: Connection, table_name, data: list | str) -> None:
     logger.debug(f"Added entry to {table_name}.")
 
 
+def run_db_command(con: Connection, command: str) -> list:
+    """
+    Returns the response from the database.
+
+    There is NO VALIDATION so use this carefully.
+    """
+    cur = con.cursor()
+
+    res = cur.execute(command)
+    data = res.fetchall()
+    res.close()
+    cur.close()
+
+    return data
+
+
 # TODO: potentially modify this to have a bit more of
 # a universal method like the one below
 def get_game_data(con: Connection, gameID: UUID) -> tuple:

@@ -20,9 +20,9 @@ from json import JSONDecodeError
 # broad litestar imports
 from litestar.connection import Request
 from litestar.logging import LoggingConfig
+from litestar import Litestar, status_codes
 from litestar.config.cors import CORSConfig
 from litestar.exceptions import HTTPException
-from litestar import Litestar, MediaType, status_codes
 
 # handling clients and sessions
 from litestar.stores.file import FileStore
@@ -32,7 +32,7 @@ from litestar.middleware.session.server_side import ServerSideSessionConfig, Ser
 # controllers and routes
 from litestar.router import Router
 from litestar.controller import Controller
-from litestar.handlers import get, post, delete, put
+from litestar.handlers import get, post, put
 
 # custom imports
 from functions import *
@@ -47,7 +47,7 @@ served its purpose. This should hopefully save on resources.
 ###################
 
 UNAUTHORIZED_RESPONSE = {
-    "status_code": 401,
+    "status_code": status_codes.HTTP_401_UNAUTHORIZED,
     "detail": "User is not authorized."
 }
 
@@ -171,7 +171,7 @@ class GameController(Controller):
         # if no data is found for the game ID,
         # the game does not exist; return a 404
         if data is None:
-            raise HTTPException(status_code=404, detail="There is no game with that ID.")
+            raise HTTPException(status_code=status_codes.HTTP_404_NOT_FOUND, detail="There is no game with that ID.")
         elif columns is None:
             logger.critical("Game data received from database is not None but columns returns None.")
             raise HTTPException(status_code=500, detail="There seems to be an issue with the database. Code: game-columns")
@@ -201,7 +201,7 @@ class GameController(Controller):
         return dictionary
 
 
-    @get(path="/{game_id:str}/players", status_code=200)
+    @get(path="/{game_id:str}/players", status_code=status_codes.HTTP_200_OK)
     async def list_players(self, request: Request, game_id: str) -> list | dict:
         """
         Responds with a list of players in the specified game.
@@ -244,7 +244,7 @@ class GameController(Controller):
             return UNAUTHORIZED_RESPONSE
 
         does_not_exist = {
-            "status_code": 404,
+            "status_code": status_codes.HTTP_404_NOT_FOUND,
             "detail": "That game does not exist."
         }
 
@@ -258,9 +258,23 @@ class GameController(Controller):
             gameID=game_id
         )
 
+        game_state = run_db_command(
+            con=con,
+            command=f"SELECT gameState FROM games WHERE gameID == {game_id};"
+        )
+
+        # if the game doesn't exist, this doesn't really matter
+        if len(game_state) < 1:
+            game_state = "PREGAME"
+        # otherwise, get its state
+        else:
+            game_state = game_state[0]
+
+        at_max_players = len(current_game_players) >= MAX_POSSIBLE_PLAYERS
+
         # if the game exists (the database responds with anything)
         # and if the user is NOT in that game currently, let them join.
-        if game_exists and request.get_session_id() not in current_game_players:
+        if not at_max_players and game_exists and request.get_session_id() not in current_game_players and game_state != "PREGAME":
             insert_into_table(
                 con,
                 "ingame",
@@ -274,7 +288,7 @@ class GameController(Controller):
                 ]
             )
             return {
-                "status_code": 200,
+                "status_code": status_codes.HTTP_200_OK,
                 "detail": "Success"
             }
         elif not game_exists:
@@ -282,7 +296,7 @@ class GameController(Controller):
         else:
             # otherwise, let them know
             return {
-                "status_code": 409,
+                "status_code": status_codes.HTTP_409_CONFLICT,
                 "detail": "User is already in game."
             }
 
@@ -308,11 +322,11 @@ class UserController(Controller):
             session = request.session
             session["username"] = username
             return {
-                "status_code": 200,
+                "status_code": status_codes.HTTP_200_OK,
                 "detail": f"Your username was successfully set to {username}."
             }
         except AttributeError:
-            raise HTTPException(status_code=500, detail="Something went wrong...")
+            raise HTTPException(status_code=status_codes.HTTP_500_INTERNAL_SERVER_ERROR, detail="Something went wrong...")
 
     @get("/")
     async def get_username(self, request: Request) -> dict:
@@ -320,7 +334,7 @@ class UserController(Controller):
         Responds with the username
         """
         default =  {
-            "status_code": 418,
+            "status_code": status_codes.HTTP_418_IM_A_TEAPOT,
             "detail": "You do not have a username.",
             "username": "",
         }
@@ -334,7 +348,7 @@ class UserController(Controller):
         username = session.get("username", None)
         if username:
             return {
-                "status_code": 200,
+                "status_code": status_codes.HTTP_200_OK,
                 "detail": "You have a username.",
                 "username": username,
             }
@@ -349,7 +363,7 @@ async def api_base_route() -> dict[str, str]:
     Returns a simple success message indicating the
     API/server is functioning properly.
     """
-    return {"status_code": 200, "detail": "The API is up and running."}
+    return {"status_code": status_codes.HTTP_200_OK, "detail": "The API is up and running."}
 
 
 @get("/clear")

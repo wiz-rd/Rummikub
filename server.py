@@ -265,7 +265,7 @@ class GameController(Controller):
 
         # if the game doesn't exist, this doesn't really matter
         if len(game_state) < 1:
-            game_state = "PREGAME"
+            game_state = "NONEXISTANT"
         # otherwise, get its state
         else:
             game_state = game_state[0]
@@ -274,7 +274,9 @@ class GameController(Controller):
 
         # if the game exists (the database responds with anything)
         # and if the user is NOT in that game currently, let them join.
-        if not at_max_players and game_exists and request.get_session_id() not in current_game_players and game_state != "PREGAME":
+        # ONLY IF THE GAME IS IN THE PREGAME STATE; other game states
+        # such as ONGOING or ENDED shouldn't allow them to join, for obvious reasons
+        if not at_max_players and game_exists and (request.get_session_id() not in current_game_players) and (game_state == "PREGAME"):
             insert_into_table(
                 con,
                 "ingame",
@@ -366,17 +368,22 @@ async def api_base_route() -> dict[str, str]:
     return {"status_code": status_codes.HTTP_200_OK, "detail": "The API is up and running."}
 
 
-@get("/clear")
-async def api_clear_sessions() -> None:
+@get("/clear", status_code=status_codes.HTTP_200_OK)
+async def api_clear_sessions() -> list:
     """
     Clears sessions that have expired.
     """
     await SESSION_FILE_STORE.delete_expired()
-    return
+    return {
+        "status_code": status_codes.HTTP_200_OK,
+        "detail": "done",
+    }
+
 
 ################
 # SERVER SETUP #
 ################
+
 
 URL = "http://localhost/"
 cors_config = CORSConfig(allow_origins=[URL])
@@ -390,4 +397,10 @@ app = Litestar(
     middleware=[rate_limit.middleware, SESSION_CONFIG.middleware],
     logging_config=lgr,
     # cors_config=cors_config,
+
+    # after each response, clear sessions
+    # hopefully this doesn't have much overhead.
+    # If so, we can always change how
+    # and when this is implemented
+    after_response=api_clear_sessions,
 )

@@ -1,4 +1,5 @@
 import json
+import random
 from uuid import UUID, uuid4
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -381,6 +382,69 @@ class Game:
 
         Returns a bool of if the game
         was successfully started or not.
+        Assumes the amount of players
+        has been verified already.
         """
-        # TODO: NOT PASS
-        pass
+        # this should stop any future users from joining
+        self.game_state = "ONGOING"
+
+        # if the volume of tiles is too high
+        # (preparation for if I ever add custom settings)
+        if self.game_data.expected_tile_count > MAX_TILE_COUNT:
+            raise ValueError(f"The tile count {self.game_data.expected_tile_count} is higher than the maximum count of {MAX_TILE_COUNT}.")
+
+        # so to make the tile count appropriate to the amount of players
+        # (which the tile count should be tiered to reflect), but not have
+        # only a portion of the colors, you need either 2 sets of all colors
+        # (8 total sets) or 3 sets of all colors (12 total sets of 1 - 13, if color is ignored)
+        set_count = 8 if self.game_data.max_players < 5 else 12
+
+        for _ in range(int(set_count / 4)):
+            for color in COLORS.values():
+                for num in range(self.game_data.min_tile, self.game_data.max_tile):
+                    self.table.pool.append(Tile(number=num, color=color))
+
+        # add the right amount of jokers with random colors
+        for _ in range(self.game_data.joker_count):
+            self.table.pool.append(
+                Tile(
+                    color=random.choice(list(COLORS.values())),
+                    joker=True
+                )
+            )
+
+        return True
+
+    def dole_out_hands(self, players: list[IngameRow]) -> list[Hand]:
+        """
+        Doles out tiles from the pool
+        into a list of Hand objects.
+
+        Uses the game_data.starting_hand_count
+        as reference for how many should
+        be in each hand.
+        """
+        # the pool size but to be used as an index
+        pool_size_index = len(self.table.pool) - 1
+        hands = list()
+
+        for i in range(self.game_data.max_players):
+            for _ in range(self.game_data.starting_hand_count):
+                # take a random tile from the pool
+                tile: Tile = self.table.pool.pop(random.randint(0, pool_size_index))
+                # put it in the player's hand
+                players[i].hand.tiles.append(tile)
+            # appending this to be returned
+            hands.append(players[i].hand)
+        # catch these (returned) hands
+        return hands
+        # this is a joke. Do not catch any thrown hands.
+        # Hopefully no hands will be thrown.
+
+    def draw_tile(self) -> Tile:
+        """
+        Draws a tile from the pool.
+        """
+        current_tile_count = len(self.table.pool)
+
+        return self.table.pool.pop(random.randint(0, current_tile_count - 1))

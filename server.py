@@ -23,6 +23,7 @@ from litestar.logging import LoggingConfig
 from litestar import Litestar, status_codes
 from litestar.config.cors import CORSConfig
 from litestar.exceptions import HTTPException
+from litestar.middleware.session.base import ONE_DAY_IN_SECONDS
 
 # handling clients and sessions
 from litestar.stores.file import FileStore
@@ -59,7 +60,8 @@ os.makedirs(SESSION_FOLDER, exist_ok=True)
 
 SESSION_CONFIG = ServerSideSessionConfig(
     renew_on_access=True,
-    max_age=60 * 30,  # 60 seconds times 30 (minutes)
+    # half a day for them to keep their session alive
+    max_age=ONE_DAY_IN_SECONDS / 2,
 )
 
 SESSION_BACKEND = ServerSideSessionBackend(SESSION_CONFIG)
@@ -211,7 +213,7 @@ class GameController(Controller):
 
         player_sessions = get_players_in_game(con, game_id)
 
-        if player_sessions:
+        if player_sessions is not None and len(player_sessions) >= 1:
             players = list()
             for session in player_sessions:
                 # this has multiple steps:
@@ -219,6 +221,11 @@ class GameController(Controller):
                 # 2. convert from bytes to dict
                 # 3. get the username from the dict
                 username = await SESSION_BACKEND.get(session, SESSION_FILE_STORE)
+                # if there isn't a session anymore,
+                # skip this user.
+                if username is None:
+                    continue
+
                 try:
                     username = json.loads(username)["username"]
                 except KeyError:
@@ -252,11 +259,7 @@ class GameController(Controller):
             return does_not_exist
 
         game_exists: bool = len(get_game_data(con, game_id)[0]) >= 1
-
-        current_game_players = get_players_in_game(
-            con=con,
-            gameID=game_id
-        )
+        current_game_players = get_players_in_game(con=con, gameID=game_id)
 
         game_state = run_db_command(
             con=con,
@@ -335,7 +338,7 @@ class UserController(Controller):
         """
         Responds with the username
         """
-        default =  {
+        default = {
             "status_code": status_codes.HTTP_418_IM_A_TEAPOT,
             "detail": "You do not have a username.",
             "username": "",
@@ -368,16 +371,29 @@ async def api_base_route() -> dict[str, str]:
     return {"status_code": status_codes.HTTP_200_OK, "detail": "The API is up and running."}
 
 
-@get("/clear", status_code=status_codes.HTTP_200_OK)
-async def api_clear_sessions() -> list:
+@get("/clear")
+async def api_clear_sessions() -> None:
     """
     Clears sessions that have expired.
+
+    Also, removes users from games if their sesions have expired.
     """
     await SESSION_FILE_STORE.delete_expired()
-    return {
-        "status_code": status_codes.HTTP_200_OK,
-        "detail": "done",
-    }
+
+    players = run_db_command(
+        con=con,
+        command="SELECT userID FROM ingame;"
+    )
+
+    # get the first item from the list/tuple response
+    players = [x[0] for x in players]
+
+    for pl in players:
+        if not await SESSION_FILE_STORE.exists(pl):
+            run_db_command(
+                con=con,
+                command=f"DELETE FROM ingame WHERE userID == {pl};"
+            )
 
 
 ################
@@ -397,10 +413,4 @@ app = Litestar(
     middleware=[rate_limit.middleware, SESSION_CONFIG.middleware],
     logging_config=lgr,
     # cors_config=cors_config,
-
-    # after each response, clear sessions
-    # hopefully this doesn't have much overhead.
-    # If so, we can always change how
-    # and when this is implemented
-    after_response=api_clear_sessions,
 )

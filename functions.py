@@ -283,34 +283,41 @@ def get_players_in_game(con: Connection, gameID: str) -> list | None:
     return _get_game_or_player(con, gameID, False)
 
 
-def shuffle(max_players: int = 4, human_readable: bool = False) -> tuple:
+def shuffle(players: list[IngameRow] | tuple[IngameRow], human_readable: bool = False) -> list | tuple:
     """
-    Returns a tuple of randomized turn orders
-    to be paired with players.
+    Returns the rows from Ingame but with
+    turnNumber randomized in each of them.
 
-    Example return data:
-    (1, 0, 2, 3)
-
-    And each players' order would then be stored in
-    the ingame table with each player and hand.
-    It's essentially drawing a ticket.
+    Should NOT have duplicate turns.
 
     Human readable: start turns at 1 instead of 0.
     """
+    max_players = len(players)
     # start from 0 if human_readable is False,
     # otherwise start from 1 (1st, 2nd, 3rd, etc
     # instead of 0 meaning 1st, 1 meaning 2nd, and so on).
-    order = list(range(max_players)) if not human_readable else list(range(1, max_players + 1))
+    order = tuple(range(max_players)) if not human_readable else tuple(range(1, max_players + 1))
     # although it would be good to keep things consistent
     # and to always start at 0, I plan to just compare values
     # for which is lesser or greater or to sort the list-UUID pairs
     # regardless, so it doesn't really matter
 
-    # pair this shuffle function with
-    # a list of player IDs like:
-    # (h22Lab3, weh32ajd, 190aAApp, bmeQL24l)
-    # and then store their turn with each
-    # respective player
+    # I realize now it's plausible to just
+    # random.shuffle(players) and get the
+    # index of each player but that almost
+    # feels like more work and like it could be
+    # more problematic, so I'll leave it like this
     random.shuffle(order)
-    return tuple(order)
+
+    # I was going to worry about how
+    # these rows will be sorted,
+    # but I realize it doesn't really matter
+    # so long as it's consistent, which
+    # it should be if I leave it as-is
+    players.sort()
+
+    for i, pl in enumerate(players):
+        pl.turnNumber = order[i]
+
+    return players
 

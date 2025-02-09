@@ -55,20 +55,36 @@ served its purpose. This should hopefully save on resources.
 # NOTE: IMPLEMENT something to remove
 # a game from this set if it's been
 # ended or deleted in some way
-queues = {}
+QUEUES: dict[asyncio.Queue] = dict()
+ONGOING_GAMES = set()
+
+
+###
+# response stuff
+###
 
 UNAUTHORIZED_RESPONSE = {
     "status_code": status_codes.HTTP_401_UNAUTHORIZED,
     "detail": "User is not authorized."
 }
 
+
+###
+# database stuff
+###
+
+DAYS_UNTIL_GAME_DELETED = 2
+
 DATA_FOLDER = os.path.normpath(os.path.abspath("./data"))
 DATA_DB = os.path.join(DATA_FOLDER, "data.db")
+
 SESSION_FOLDER = os.path.join(DATA_FOLDER, "sessions")
 # create all folders if they don't exist already.
 os.makedirs(SESSION_FOLDER, exist_ok=True)
 
 SESSION_CONFIG = ServerSideSessionConfig(
+    # TODO: figure out why this isn't working.
+    # it seems like sessions end anyway
     renew_on_access=True,
     # half a day for them to keep their session alive
     max_age=ONE_DAY_IN_SECONDS / 2,
@@ -76,6 +92,11 @@ SESSION_CONFIG = ServerSideSessionConfig(
 
 SESSION_BACKEND = ServerSideSessionBackend(SESSION_CONFIG)
 SESSION_FILE_STORE = FileStore(path=Path(SESSION_FOLDER))
+
+
+###
+# logging stuff
+###
 
 lgr = LoggingConfig(
     root={"level": "INFO", "handlers": ["queue_listener"]},
@@ -85,6 +106,8 @@ lgr = LoggingConfig(
     log_exceptions="always",
 )
 
+
+
 #############################
 # INITIALIZING THE DATABASE #
 #############################
@@ -92,6 +115,15 @@ lgr = LoggingConfig(
 
 con = sqlite3.connect(DATA_DB)
 initialize_db_and_tables(con)
+
+# initializing the ONGOING GAMES
+# list to hold all ongoing games
+ongoing = run_db_command(con, command="SELECT gameID FROM games WHERE gameState == 'ONGOING';")
+
+for x in ongoing:
+    # get the first of each item from the list,
+    # because it always returns a list
+    ONGOING_GAMES.add(x[0])
 
 
 ###############################
@@ -178,7 +210,7 @@ class GameController(Controller):
         await authed(auth)
 
         # create game here
-        game = Game()
+        game = Game(game_state="ONGOING")
 
         # then, add it to the database
         insert_into_table(
@@ -186,6 +218,8 @@ class GameController(Controller):
             table_name="games",
             data=game.db_list(),
         )
+
+        ONGOING_GAMES.add(game.id)
 
         # TODO: handle custom settings if the client
         # adds them here? For the time being,
@@ -350,6 +384,20 @@ class GameController(Controller):
             }
 
 
+    @post("/{game_id:str}/posttest")
+    async def post_test(self, request: Request, game_id: str) -> None:
+        """
+        Testing updating the queue for when a change is made to a game.
+        """
+        logger.warning(ONGOING_GAMES)
+        ONGOING_GAMES.add(game_id)
+
+        if game_id not in QUEUES:
+            QUEUES[game_id] = asyncio.Queue()
+
+        await QUEUES[game_id].put("test")
+
+
     @get("/{game_id:str}/notify")
     async def notify_changes(self, request: Request, game_id: str) -> ServerSentEvent:
         """
@@ -363,12 +411,31 @@ class GameController(Controller):
         """
         auth = await is_authenticated(request)
         await authed(auth)
+        logger.warning(QUEUES)
 
-        vareaiable = ServerSentEvent(
-            content="data",
-        )
+        if game_id not in ONGOING_GAMES:
+            raise HTTPException(
+                status_code=status_codes.HTTP_404_NOT_FOUND,
+                detail=f"A game with ID {game_id} does not exist."
+            )
 
-        return vareaiable
+
+        if QUEUES.get(game_id) is None:
+            QUEUES[game_id] = asyncio.Queue()
+
+        q: asyncio.Queue = QUEUES[game_id]
+
+        async def sse():
+            """
+            To be used to output a stream
+            of Server Side Events (SSEs)
+            to the client and await further.
+            """
+            while game_id in ONGOING_GAMES:
+                data = await q.get()
+                yield data
+
+        return ServerSentEvent(sse())
 
     @get("/{game_id:str}/board")
     async def board_info(self, request: Request, game_id: str) -> dict:
@@ -519,10 +586,33 @@ async def api_clear_sessions() -> None:
     """
     await SESSION_FILE_STORE.delete_expired()
 
-    players = run_db_command(
-        con=con,
-        command="SELECT userID FROM ingame;"
-    )
+    # get all games in ingame
+
+    # I'm aware this could be problematic but I don't
+    # know of a way to get games past a certain
+    # date when using SQLite (dates are required
+    # to be stored as text) so I have to manually
+    # parse each date and ensure it's valid
+    games = run_db_command(con=con, command="SELECT gameID from ingame;")
+
+    # get gameID and lastActive from the list of games returned
+    suspected_games = [(x[0], x[2]) for x in games]
+    old_games = list()
+
+    for old_game in suspected_games:
+        current_date = datetime.date(datetime.now())
+
+        if current_date - datetime.date(old_game[1]) > DAYS_UNTIL_GAME_DELETED:
+            # remove this from the list of SSE notifications
+            ONGOING_GAMES.discard(old_game[0])
+            old_games.append(f"'{old_game}'")
+
+    # convert this to a list of "gameID OR gameID OR gameID..."
+    old_games = " OR ".join(old_games)
+
+    run_db_command(con=con, command=f"DELETE FROM games WHERE gameID == {old_games};")
+
+    players = run_db_command(con=con, command="SELECT userID FROM ingame;")
 
     # get the first item from the list/tuple response
     players = [x[0] for x in players]
@@ -531,7 +621,10 @@ async def api_clear_sessions() -> None:
         if not await SESSION_FILE_STORE.exists(pl):
             run_db_command(
                 con=con,
-                command=f"DELETE FROM ingame WHERE userID == {pl};"
+                # TODO: figure out why this isn't working
+                # I do need to use the values in here for now,
+                # though, so it's actually good it didn't work
+                command=f"DELETE FROM ingame WHERE userID == '{pl}';"
             )
 
 

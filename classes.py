@@ -2,9 +2,8 @@ import json
 import random
 from uuid import UUID, uuid4
 from datetime import datetime
+from json import JSONDecodeError
 from dataclasses import dataclass, field
-
-from litestar.dto import DTOConfig, DataclassDTO
 
 
 ######################
@@ -88,6 +87,17 @@ class Tile:
     # this could just be the number 0,
     # but a separate flag increases readability a ton.
 
+    def construct_from_db(self, data: dict) -> None:
+        """
+        Constructs tiles from a list.
+
+        For use on a hand returned from the database and
+        already constructed from the database output.
+        """
+        self.number = data["number"]
+        self.color = data["color"]
+        self.joker = data["joker"]
+
 
 @dataclass
 @to_json
@@ -125,6 +135,18 @@ class Hand:
             if tile.joker:
                 self.score -= 30
 
+    def construct_from_db(self, data: str) -> None:
+        """
+        Modifies the current Hand object to reflect the database output.
+        """
+        data = json.loads(data)
+        self.score = data["score"]
+
+        for t in data["tiles"]:
+            tile = Tile()
+            tile.construct_from_db(t)
+            self.tiles.append(tile)
+
 
 @dataclass
 @to_json
@@ -161,6 +183,12 @@ class Group:
                 self.is_set = False
 
             colors.append(tile.color)
+
+    def construct_from_db(self, data: str) -> None:
+        """
+        Currently does nothing. Need to implement.
+        """
+        pass
 
     def __post_init__(self):
         """
@@ -355,6 +383,45 @@ class Game:
             self.id = uuid4().hex
 
         self.game_data.initialize()
+
+    def construct_from_db(self, contents: tuple[str] | list[str], columns: tuple[str] | list[str]) -> None:
+        """
+        Updates the object to match a game from the database.
+        Requires a Game object to be created already so it can
+        more easily be manipulated.
+
+        Arguments: the raw responses from the server
+        """
+        game_dict = dict()
+
+        for i, cl in enumerate(columns):
+            # only converts the item in the list
+            # to JSON if it's valid JSON
+            # (i.e., not a string such as a UUID or game state)
+            try:
+                game_dict[cl] = json.loads(contents[i])
+            except JSONDecodeError:
+                game_dict[cl] = contents[i]
+
+        # game-specific attributes
+        self.id = game_dict["gameID"]
+        self.game_state = game_dict["gameState"]
+        self.last_active = game_dict["lastActive"]
+        self.current_player_turn = game_dict["currentPlayerTurn"]
+        
+        # setting up the table
+        self.table.pool = game_dict["tableContents"]["pool"]
+        self.table.groups = game_dict["tableContents"]["groups"]
+
+        # setting up game_data
+        self.game_data.turn_time_limit = game_dict["gameData"]["turn_time_limit"]
+        self.game_data.starting_hand_count = game_dict["gameData"]["starting_hand_count"]
+        self.game_data.min_entry_meld_score = game_dict["gameData"]["min_entry_meld_score"]
+        self.game_data.max_players = game_dict["gameData"]["max_players"]
+        self.game_data.joker_count = game_dict["gameData"]["joker_count"]
+        self.game_data.max_tile = game_dict["gameData"]["max_tile"]
+        self.game_data.min_tile = game_dict["gameData"]["min_tile"]
+        self.game_data.expected_tile_count = game_dict["gameData"]["expected_tile_count"]
 
     def db_list(self) -> list[str]:
         """

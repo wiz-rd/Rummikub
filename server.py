@@ -13,17 +13,21 @@ for a Linux machine.
 
 # default imports
 import os
+import asyncio
 import sqlite3
 from pathlib import Path
 from json import JSONDecodeError
 
 # broad litestar imports
-from litestar.connection import Request
 from litestar.logging import LoggingConfig
 from litestar import Litestar, status_codes
 from litestar.config.cors import CORSConfig
 from litestar.exceptions import HTTPException
 from litestar.middleware.session.base import ONE_DAY_IN_SECONDS
+
+# requests and responses
+from litestar.connection import Request
+from litestar.response.sse import ServerSentEventMessage, ServerSentEvent
 
 # handling clients and sessions
 from litestar.stores.file import FileStore
@@ -46,6 +50,12 @@ served its purpose. This should hopefully save on resources.
 ###################
 # CONST VARIABLES #
 ###################
+
+# a set of the queues for each game
+# NOTE: IMPLEMENT something to remove
+# a game from this set if it's been
+# ended or deleted in some way
+queues = {}
 
 UNAUTHORIZED_RESPONSE = {
     "status_code": status_codes.HTTP_401_UNAUTHORIZED,
@@ -89,10 +99,26 @@ initialize_db_and_tables(con)
 ###############################
 
 
-def is_authenticated(req: Request):
+async def authed(authorized: bool) -> None:
+    """
+    Simple helper method to automatically
+    raise an HTTP error if the user isn't authorized.
+
+    I don't know of a better way to change status codes
+    as far as Uvicorn is concerned; just returning a
+    dictionary with "status_code" as a key doesn't work.
+    """
+    if not authorized:
+        raise HTTPException(
+            status_code=UNAUTHORIZED_RESPONSE["status_code"],
+            detail=UNAUTHORIZED_RESPONSE["detail"],
+        )
+
+
+async def is_authenticated(req: Request):
     """
     Returns whether or not the user
-    has a session ID, a simple authentication.
+    has a valid session ID, a simple authentication.
 
     This, most likely, is completely
     redundant because sessions are created
@@ -102,14 +128,31 @@ def is_authenticated(req: Request):
     But I'll leave it for now, both for
     future use and just as an extra precaution.
     """
+    # if the client doesn't have a session
     if not req.session:
         return False
-    return True
+
+    # if the client has a session not on the server side
+    # NOTE: this throws an error because it's not awaited,
+    # but I really don't know how they expect me to do this
+    exists = await SESSION_FILE_STORE.exists(req.get_session_id())
+
+    if exists:
+        return True
+    else:
+        # delete expired in case it's an expired session
+        SESSION_FILE_STORE.delete_expired()
+        return False
 
 
 ##########################
 # ROUTES AND CONTROLLERS #
 ##########################
+
+
+########
+# GAME #
+########
 
 
 class GameController(Controller):
@@ -131,11 +174,8 @@ class GameController(Controller):
         For the time being, this will
         simply create a game when asked to.
         """
-        # TODO: make sure this ability
-        # to create games at will
-        # isn't just open to the internet
-        if not is_authenticated(request):
-            return UNAUTHORIZED_RESPONSE
+        auth = await is_authenticated(request)
+        await authed(auth)
 
         # create game here
         game = Game()
@@ -164,9 +204,11 @@ class GameController(Controller):
         # avoid giving them any information
         # to limit the damage of DoS and other
         # types of attacks.
-        # TODO: Implement this.
-        if not is_authenticated(request):
-            return UNAUTHORIZED_RESPONSE
+
+        # thanks Python for not letting me put
+        # awaits in if statements
+        auth = await is_authenticated(request)
+        await authed(auth)
 
         data, columns = get_game_data(con, game_id)
 
@@ -208,8 +250,8 @@ class GameController(Controller):
         """
         Responds with a list of players in the specified game.
         """
-        if not is_authenticated(request):
-            return UNAUTHORIZED_RESPONSE
+        auth = await is_authenticated(request)
+        await authed(auth)
 
         player_sessions = get_players_in_game(con, game_id)
 
@@ -247,23 +289,25 @@ class GameController(Controller):
         """
         Attempts to let a player join a game.
         """
-        if not is_authenticated(request):
-            return UNAUTHORIZED_RESPONSE
+        auth = await is_authenticated(request)
+        await authed(auth)
 
         does_not_exist = {
             "status_code": status_codes.HTTP_404_NOT_FOUND,
             "detail": "That game does not exist."
         }
 
-        if get_game_data(con, game_id)[0] is None:
+        first_resulting_game = get_game_data(con, game_id)[0]
+
+        if first_resulting_game is None:
             return does_not_exist
 
-        game_exists: bool = len(get_game_data(con, game_id)[0]) >= 1
+        game_exists: bool = len(first_resulting_game) >= 1
         current_game_players = get_players_in_game(con=con, gameID=game_id)
 
         game_state = run_db_command(
             con=con,
-            command=f"SELECT gameState FROM games WHERE gameID == {game_id};"
+            command=f"SELECT gameState FROM games WHERE gameID == '{game_id}';"
         )
 
         # if the game doesn't exist, this doesn't really matter
@@ -280,7 +324,7 @@ class GameController(Controller):
         # ONLY IF THE GAME IS IN THE PREGAME STATE; other game states
         # such as ONGOING or ENDED shouldn't allow them to join, for obvious reasons
         if not at_max_players and game_exists and (request.get_session_id() not in current_game_players) and (game_state == "PREGAME"):
-            insert_into_table(
+            await insert_into_table(
                 con,
                 "ingame",
                 [
@@ -304,6 +348,96 @@ class GameController(Controller):
                 "status_code": status_codes.HTTP_409_CONFLICT,
                 "detail": "User is already in game."
             }
+
+
+    @get("/{game_id:str}/notify")
+    async def notify_changes(self, request: Request, game_id: str) -> ServerSentEvent:
+        """
+        Notifies the client with an SSE when a
+        change is made to the game in question,
+        that way they can request the new board
+        layout from here.
+
+        I was going to send the whole data to the
+        client but I think this is better.
+        """
+        auth = await is_authenticated(request)
+        await authed(auth)
+
+        vareaiable = ServerSentEvent(
+            content="data",
+        )
+
+        return vareaiable
+
+    @get("/{game_id:str}/board")
+    async def board_info(self, request: Request, game_id: str) -> dict:
+        """
+        Returns the board info and user's hand
+        if they are authenticated.
+        """
+        auth = await is_authenticated(request)
+        await authed(auth)
+
+        players = get_players_in_game(con, game_id)
+        session_id = "97fb41f38dd46b14dd3255589ea3d13329af7251804ce76a8bdde2aa0cb02a3f" # request.get_session_id()
+
+
+        # TODO UNCOMMENT THIS AUTHENTICATION
+
+
+        # # NOTE: this returns an AUTH ALSO
+        # # spent some time debugging this
+        # # if the user isn't in the game, tell them
+        # if session_id not in players:
+        #     await authed(False)
+
+        # grabbing the game data
+        # both game_str and columns should be lists
+        game_str, columns = get_game_data(con, game_id)
+
+        # if the game or columns don't exist
+        if game_str is None or columns is None:
+            raise HTTPException(status_code=status_codes.HTTP_404_NOT_FOUND, detail="There is no game with that ID.")
+
+        game = Game()
+        game.construct_from_db(game_str, columns)
+        # remove the pool before sending it to the client
+        # I *could* make a DTO but I feel like that'd needlessly
+        # duplicate all other data; it's not like half of the values
+        # are sent to client, it's all data, just without the pool
+        # specifically, so I think this is wisest, at least for now
+        del game.table.pool
+
+        ingame_row = run_db_command(
+            con=con,
+            command=f"SELECT * FROM ingame WHERE gameID == '{game_id}' AND userID == '{session_id}';"
+        )
+
+        # if user isn't in that game or the
+        # game doesn't exist period
+        if len(ingame_row) <= 0:
+            raise HTTPException(
+                status_code=status_codes.HTTP_404_NOT_FOUND,
+                detail="The game and user pair does not exist."
+            )
+
+        hand = Hand()
+
+        # get the first item from the list of ingame rows
+        # and then get the last item in the list, the Hand
+        hand.construct_from_db(ingame_row[0][3])
+
+        return {
+            "status_code": status_codes.HTTP_200_OK,
+            "game": game,
+            "hand": hand,
+        }
+
+
+########
+# USER #
+########
 
 
 class UserController(Controller):
@@ -360,6 +494,11 @@ class UserController(Controller):
 
         # if they don't have a username but DO have a session
         return default
+
+
+##################
+# GENERIC ROUTES #
+##################
 
 
 @get("/")

@@ -228,6 +228,14 @@ class GameController(Controller):
         # with data about the game.
         return game
 
+    ##################
+    # EXISTANT GAMES #
+    ##################
+    #####
+    # for games that exist already
+    # but can be in any state
+    #####
+
     @get(path="/{game_id:str}")
     async def get_game(self, request: Request, game_id: str) -> Game | dict:
         """
@@ -278,7 +286,6 @@ class GameController(Controller):
 
         return dictionary
 
-
     @get(path="/{game_id:str}/players", status_code=status_codes.HTTP_200_OK)
     async def list_players(self, request: Request, game_id: str) -> list | dict:
         """
@@ -313,6 +320,12 @@ class GameController(Controller):
             return players
         else:
             return []
+
+
+    #####
+    # this method is for
+    # games in PREGAME only
+    #####
 
     # NOTE: Should I have /join/?
     # most likely, yes, to be distinct
@@ -383,19 +396,115 @@ class GameController(Controller):
                 "detail": "User is already in game."
             }
 
+    #################
+    # ONGOING GAMES #
+    #################
+    ######
+    # these methods should increment
+    # the turn counter and are handling
+    # games that already exist and are ongoing
+    ######
 
-    @post("/{game_id:str}/posttest")
-    async def post_test(self, request: Request, game_id: str) -> None:
+    async def increment_turn(self, game_id) -> None:
         """
-        Testing updating the queue for when a change is made to a game.
+        Increments the turn for the given game ID.
         """
-        logger.warning(ONGOING_GAMES)
+        run_db_command(
+            con=con,
+            command=f"UPDATE games SET currentPlayerTurn = currentPlayerTurn + 1 WHERE gameID == '{game_id}';"
+        )
+
+    async def notify_clients_of_change(self, _: Request, game_id: str) -> None:
+        """
+        Adds a message to the queue for the given game ID.
+        To be used to notify clients that a move has been completed.
+        """
+        # update the clients
         ONGOING_GAMES.add(game_id)
 
         if game_id not in QUEUES:
             QUEUES[game_id] = asyncio.Queue()
 
         await QUEUES[game_id].put("test")
+
+        # update the game turn
+        self.increment_turn(game_id)
+
+    @post("/{game_id:str}/draw", after_response=notify_clients_of_change)
+    async def post_test(self, request: Request, game_id: str) -> dict:
+        """
+        Make a move in the game such as draw
+        a tile or place down a run or group.
+        """
+        auth = await is_authenticated(request)
+        await authed(auth)
+
+        # --------------------
+        # player validation
+        players = get_players_in_game(con, game_id)
+        session_id = request.get_session_id()
+
+        # NOTE: this returns an AUTH ALSO
+        # spent some time debugging this
+        # if the user isn't in the game, tell them
+        if session_id not in players:
+            await authed(False)
+
+        # --------------------
+
+        # --------------------
+        # db game to object
+
+        # grabbing the game data
+        # both game_str and columns should be lists
+        game_str, columns = get_game_data(con, game_id)
+
+        # if the game or columns don't exist
+        if game_str is None or columns is None:
+            raise HTTPException(status_code=status_codes.HTTP_404_NOT_FOUND, detail="There is no game with that ID.")
+
+        game = Game()
+        game.construct_from_db(game_str, columns)
+
+        if len(game.table.pool) <= 0:
+            raise HTTPException(status_code=status_codes.HTTP_410_GONE, detail="There are no tiles left in the pool!")
+
+        # ----------------------
+
+        # ----------------------
+        # db hand to hand object
+
+        ingame_row = run_db_command(
+            con=con,
+            command=f"SELECT * FROM ingame WHERE gameID == '{game_id}' AND userID == '{session_id}';"
+        )
+
+        # validate that it is, in fact, the player's
+        # turn before giving them a tile
+        current_turn = ingame_row[2]
+
+        # cycle = whoever's turn it SHOULD be
+        # e.g. if it's turn 20, then whoever has
+        # the turnNumber of 0 should go.
+        # turn 3 is player 3, etc
+        cycle = game.current_player_turn % game.game_data.max_players
+
+        if cycle != current_turn:
+            raise HTTPException(status_code=status_codes.HTTP_403_FORBIDDEN, detail="It is isn't your turn!")
+
+        # if user isn't in that game or the
+        # game doesn't exist period
+        if len(ingame_row) <= 0:
+            raise HTTPException(
+                status_code=status_codes.HTTP_404_NOT_FOUND,
+                detail="The game and user pair does not exist."
+            )
+
+        hand = Hand()
+
+        # get the first item from the list of ingame rows
+        # and then get the last item in the list, the Hand
+        hand.construct_from_db(ingame_row[0][3])
 
 
     @get("/{game_id:str}/notify")
@@ -411,7 +520,6 @@ class GameController(Controller):
         """
         auth = await is_authenticated(request)
         await authed(auth)
-        logger.warning(QUEUES)
 
         if game_id not in ONGOING_GAMES:
             raise HTTPException(
@@ -447,17 +555,13 @@ class GameController(Controller):
         await authed(auth)
 
         players = get_players_in_game(con, game_id)
-        session_id = "97fb41f38dd46b14dd3255589ea3d13329af7251804ce76a8bdde2aa0cb02a3f" # request.get_session_id()
+        session_id = request.get_session_id()
 
-
-        # TODO UNCOMMENT THIS AUTHENTICATION
-
-
-        # # NOTE: this returns an AUTH ALSO
-        # # spent some time debugging this
-        # # if the user isn't in the game, tell them
-        # if session_id not in players:
-        #     await authed(False)
+        # NOTE: this returns an AUTH ALSO
+        # spent some time debugging this
+        # if the user isn't in the game, tell them
+        if session_id not in players:
+            await authed(False)
 
         # grabbing the game data
         # both game_str and columns should be lists

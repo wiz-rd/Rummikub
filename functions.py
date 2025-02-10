@@ -80,7 +80,7 @@ def initialize_db_and_tables(con: Connection) -> None:
         gameID TEXT,
         gameState TEXT,
         lastActive TEXT,
-        currentPlayerTurn TEXT,
+        currentPlayerTurn INT,
         tableContents TEXT,
         gameData TEXT,
         PRIMARY KEY(gameID DESC));""",
@@ -184,6 +184,7 @@ def insert_into_table(con: Connection, table_name, data: list | str) -> None:
         query = f"INSERT INTO {table_name} VALUES({', '.join(data)});"
 
     res = cur.execute(query)
+    cur.close()
     res.close()
     con.commit()
     logger.debug(f"Added entry to {table_name}.")
@@ -201,8 +202,22 @@ def run_db_command(con: Connection, command: str) -> list:
     data = res.fetchall()
     res.close()
     cur.close()
+    con.commit()
 
     return data
+
+
+def update_db(con: Connection, command: str) -> None:
+    """
+    Same as the run_db_command function but is
+    intended for changes that don't return anything,
+    namely UPDATE commands.
+    """
+    cur = con.cursor()
+    res = cur.execute(command)
+    res.close()
+    cur.close()
+    con.commit()
 
 
 # TODO: potentially modify this to have a bit more of
@@ -317,7 +332,7 @@ def shuffle(players: list[IngameRow] | tuple[IngameRow], human_readable: bool = 
     players.sort()
 
     for i, pl in enumerate(players):
-        pl.turnNumber = order[i]
+        pl.turn_number = order[i]
 
     return players
 

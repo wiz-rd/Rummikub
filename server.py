@@ -286,6 +286,121 @@ class GameController(Controller):
 
         return dictionary
 
+    @put(path="/{game_id:str}/start")
+    async def start_game(self, request: Request, game_id: str) -> Game:
+        """
+        Starts a game if it exists and they
+        are a player in the game. There are no game
+        hosts or anything.
+        """
+        auth = await is_authenticated(request)
+        await authed(auth)
+
+        # --------------------
+        # getting player data from the server
+        players = get_players_in_game(con, game_id)
+        session_id = request.get_session_id()
+
+        # NOTE: this returns an AUTH ALSO
+        # spent some time debugging this
+        # if the user isn't in the game, tell them
+        if session_id not in players:
+            await authed(False)
+
+        # --------------------
+
+        if len(players) > MAX_POSSIBLE_PLAYERS:
+            raise HTTPException(
+                status_code=status_codes.HTTP_409_CONFLICT,
+                detail="There are too many players!"
+            )
+        elif len(players) < MIN_POSSIBLE_PLAYERS:
+            raise HTTPException(
+                status_code=status_codes.HTTP_409_CONFLICT,
+                detail="There are too few players!"
+            )
+
+        # --------------------
+        # db game to object
+
+        # grabbing the game data
+        # both game_str and columns should be lists
+        game_str, columns = get_game_data(con, game_id)
+
+        # if the game or columns don't exist
+        if game_str is None or columns is None:
+            raise HTTPException(status_code=status_codes.HTTP_404_NOT_FOUND, detail="There is no game with that ID.")
+
+        # get game details
+        game = Game()
+        game.construct_from_db(game_str, columns)
+
+        if game.game_state != "PREGAME":
+            raise HTTPException(
+                status_code=status_codes.HTTP_409_CONFLICT,
+                detail="The game has been already started!"
+            )
+
+        if not game.start():
+            raise HTTPException(
+                status_code=status_codes.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="The server failed to start the game! Please try creating a new one!"
+            )
+
+        ingame_rows = run_db_command(
+            con=con,
+            command=f"SELECT * FROM ingame WHERE gameID == '{game_id}';"
+        )
+
+        game.game_state = "ONGOING"
+        # --------------------
+
+        # --------------------
+        # grabbing the rows from Ingame
+        rows = list()
+
+        for igr in ingame_rows:
+            # create a dummy row
+            row = IngameRow(0, 0, "0", 0,)
+            row.construct_from_db(igr)
+            rows.append(row)
+
+        # modifying the rows
+        rows = shuffle(rows)
+        hands = game.dole_out_hands(rows)
+        row_to_send = None
+
+        # TODO: FIX THIS
+        # I don't know why this isn't working.
+        # It should be saving to the database,
+        # but it's not, for some reasons
+        # ----------------
+        # saving changed rows to db
+        for i, row in enumerate(rows):
+            row.hand = hands[i]
+            if row.user_id == session_id:
+                row_to_send = row
+
+            update_db(
+                con=con,
+                command=f"UPDATE ingame SET turnNumber = {row.turn_number}, hand = '{row.hand}' WHERE userID == '{row.user_id}';"
+            )
+
+        # ----------------
+        # saving changed game to db
+        today = datetime.date(datetime.now())
+        update_db(
+            con=con,
+            # command=f"UPDATE games SET lastActive = '{today}', tableContents = '{game.table}', currentPlayerTurn = {game.current_player_turn + 1} WHERE gameID == '{game.id}';"
+            command=f"UPDATE games SET gameState = '{game.game_state}', lastActive = '{today}', tableContents = '{game.table}', currentPlayerTurn = {game.current_player_turn + 1} WHERE gameID == '{game.id}';"
+        )
+
+        ONGOING_GAMES.add(game_id)
+
+        # TODO: ADD "NOTIFY PLAYERS" SECTION, if necessary
+
+        return row_to_send
+
     @get(path="/{game_id:str}/players", status_code=status_codes.HTTP_200_OK)
     async def list_players(self, request: Request, game_id: str) -> list | dict:
         """
@@ -347,7 +462,7 @@ class GameController(Controller):
         first_resulting_game = get_game_data(con, game_id)[0]
 
         if first_resulting_game is None:
-            return does_not_exist
+            raise HTTPException(**does_not_exist)
 
         game_exists: bool = len(first_resulting_game) >= 1
         current_game_players = get_players_in_game(con=con, gameID=game_id)
@@ -362,7 +477,7 @@ class GameController(Controller):
             game_state = "NONEXISTANT"
         # otherwise, get its state
         else:
-            game_state = game_state[0]
+            game_state = game_state[0][0]
 
         at_max_players = len(current_game_players) >= MAX_POSSIBLE_PLAYERS
 
@@ -371,7 +486,7 @@ class GameController(Controller):
         # ONLY IF THE GAME IS IN THE PREGAME STATE; other game states
         # such as ONGOING or ENDED shouldn't allow them to join, for obvious reasons
         if not at_max_players and game_exists and (request.get_session_id() not in current_game_players) and (game_state == "PREGAME"):
-            await insert_into_table(
+            insert_into_table(
                 con,
                 "ingame",
                 [
@@ -388,13 +503,28 @@ class GameController(Controller):
                 "detail": "Success"
             }
         elif not game_exists:
-            return does_not_exist
-        else:
+            raise HTTPException(**does_not_exist)
+        elif game_state != "PREGAME" and game_state != "NONEXISTANT":
+            raise HTTPException(
+                status_code=status_codes.HTTP_423_LOCKED,
+                detail="The game is already ongoing."
+            )
+        elif at_max_players:
+            raise HTTPException(
+                status_code=status_codes.HTTP_406_NOT_ACCEPTABLE,
+                detail="This game is full!"
+            )
+        elif request.get_session_id() in current_game_players:
             # otherwise, let them know
-            return {
-                "status_code": status_codes.HTTP_409_CONFLICT,
-                "detail": "User is already in game."
-            }
+            raise HTTPException(
+                status_code=status_codes.HTTP_418_IM_A_TEAPOT,
+                detail="User is already in this game."
+            )
+        else:
+            raise HTTPException(
+                status_code=status_codes.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Not sure what happened..."
+            )
 
     #################
     # ONGOING GAMES #
@@ -431,7 +561,7 @@ class GameController(Controller):
         self.increment_turn(game_id)
 
     @post("/{game_id:str}/draw", after_response=notify_clients_of_change)
-    async def post_test(self, request: Request, game_id: str) -> dict:
+    async def draw_tile(self, request: Request, game_id: str) -> Hand:
         """
         Make a move in the game such as draw
         a tile or place down a run or group.
@@ -479,8 +609,8 @@ class GameController(Controller):
             command=f"SELECT * FROM ingame WHERE gameID == '{game_id}' AND userID == '{session_id}';"
         )
 
-        # validate that it is, in fact, the player's
-        # turn before giving them a tile
+        # to validate that it is, in fact, the
+        # player's turn before giving them a tile
         current_turn = ingame_row[2]
 
         # cycle = whoever's turn it SHOULD be
@@ -506,6 +636,27 @@ class GameController(Controller):
         # and then get the last item in the list, the Hand
         hand.construct_from_db(ingame_row[0][3])
 
+        # draw a tile from the game's pool and put
+        # it into the player's hand
+        hand.tiles.append(game.draw_tile())
+
+        # --------------------------
+        # appending changes to database
+
+        # update the game
+        today = datetime.date(datetime.now())
+        run_db_command(
+            con=con,
+            command=f"UPDATE games SET lastActive = '{today}', tableContents = '{game.table}', currentPlayerTurn = {game.current_player_turn + 1} WHERE gameID == '{game.id}';"
+        )
+
+        # update the hand
+        run_db_command(
+            con=con,
+            command=f"UPDATE ingame SET hand = '{hand}';"
+        )
+
+        return hand
 
     @get("/{game_id:str}/notify")
     async def notify_changes(self, request: Request, game_id: str) -> ServerSentEvent:

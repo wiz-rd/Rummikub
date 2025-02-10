@@ -12,9 +12,21 @@ from dataclasses import dataclass, field
 
 # tile count should never exceed this many
 # both for sanity and resources
-MAX_TILE_COUNT: int = 1_000
-MAX_POSSIBLE_PLAYERS: int = 6
-MIN_POSSIBLE_PLAYERS: int = 4
+MAX_TILE_COUNT = 1_000
+MAX_POSSIBLE_PLAYERS = 6
+MIN_POSSIBLE_PLAYERS = 4
+
+
+def convert_bools_for_json(data: str) -> str:
+    """
+    This gave me a lot of headache so I made
+    a method, that way I can have even more
+    headache when this also fails and I can't
+    figure out why.
+    """
+    data = data.replace("False", "false")
+    data = data.replace("True", "true")
+    return data
 
 
 ##############
@@ -39,7 +51,8 @@ def to_json(cls):
         """
         # swapping the quotes because JSON
         # prefers them to be double quotes
-        return str(self.__dict__).replace("'", '"')
+        first_part = str(self.__dict__).replace("'", '"')
+        return convert_bools_for_json(first_part)
     
     cls.__repr__ = new_str
     return cls
@@ -139,7 +152,13 @@ class Hand:
         """
         Modifies the current Hand object to reflect the database output.
         """
-        data = json.loads(data)
+        # I'm so tired of this
+        try:
+            data = json.loads(data)
+        except JSONDecodeError:
+            data = convert_bools_for_json(data)
+            data = json.loads(data)
+
         self.score = data["score"]
 
         for t in data["tiles"]:
@@ -229,36 +248,50 @@ class IngameRow:
     row to the table with the same game ID and
     the new player's user ID.
     """
-    game_id: UUID
-    user_id: str
-    hand: Hand | dict | str
-    turnNumber: int
+    game_id: UUID = ""
+    user_id: str = ""
+    hand: Hand | dict | str = None
+    turn_number: int = 0
 
-    def __post_init__(self):
-        """
-        Ran at the end of __init__
-        of a dataclass. I'll use this
-        to format the hand attribute
-        automatically.
-        """
-        # checking for hand's type
-        if isinstance(self.hand, Hand):
-            pass
-        elif isinstance(self.hand, dict):
-            # if it's a dict, convert it
-            # to a Hand
-            self.set_hand(self.hand)
-        elif isinstance(self.hand, str):
-            # if it's a str, convert it to
-            # a dict and then a Hand
-            self.set_hand(json.loads(self.hand))
-        else:
-            # if it's none of them,
-            # raise an issue
-            raise ValueError(f"Hand value must be of type dict, str, or Hand.")
+    # def __post_init__(self):
+    #     """
+    #     Ran at the end of __init__
+    #     of a dataclass. I'll use this
+    #     to format the hand attribute
+    #     automatically.
+    #     """
+    #     # checking for hand's type
+    #     if isinstance(self.hand, Hand):
+    #         pass
+    #     elif isinstance(self.hand, dict):
+    #         # if it's a dict, convert it
+    #         # to a Hand
+    #         self.set_hand(self.hand)
+    #     elif isinstance(self.hand, str):
+    #         # if it's a str, convert it to
+    #         # a dict and then a Hand
+    #         self.set_hand(json.loads(self.hand))
+    #     else:
+    #         # if it's none of them,
+    #         # raise an issue
+    #         raise ValueError(f"Hand value must be of type dict, str, or Hand.")
 
-        # if it's any of the accepted types
-        return
+    #     # if it's any of the accepted types
+    #     return
+
+    def construct_from_db(self, data: str) -> None:
+        """
+        Updates this object to match the database.
+        """
+        # copying from the ER diagram:
+        # userID, gameID, turnNumber, and hand
+        self.user_id = data[0]
+        self.game_id = data[1]
+        self.turn_number = data[2]
+        hand = Hand()
+        data_parsed = convert_bools_for_json(data[3])
+        hand.construct_from_db(data_parsed)
+        self.hand = hand
 
     def set_hand(self, d: dict) -> Hand:
         """
@@ -355,7 +388,7 @@ class Game:
     id: UUID = None
 
     # stores whose turn it is in the game currently
-    current_player_turn: UUID = 0
+    current_player_turn: int = 0
 
     game_state: str = "PREGAME"
     table: Table = field(default_factory=Table)
@@ -408,10 +441,25 @@ class Game:
         self.game_state = game_dict["gameState"]
         self.last_active = game_dict["lastActive"]
         self.current_player_turn = game_dict["currentPlayerTurn"]
-        
+
         # setting up the table
-        self.table.pool = game_dict["tableContents"]["pool"]
-        self.table.groups = game_dict["tableContents"]["groups"]
+        table = game_dict["tableContents"]
+
+        # convert from Pythonic true/falses
+        # to JSON compatible t/f (so, lowercase)
+        # I can't believe this is necessary
+        # later: nevermind, it's user error - converting
+        # an object to JSON manually can have its
+        # consequences...
+        if not isinstance(table, dict):
+            try:
+                table = json.loads(table)
+            except JSONDecodeError:
+                table = convert_bools_for_json(table)
+                table = json.loads(table)
+
+        self.table.pool = table["pool"]
+        self.table.groups = table["groups"]
 
         # setting up game_data
         self.game_data.turn_time_limit = game_dict["gameData"]["turn_time_limit"]
@@ -443,9 +491,7 @@ class Game:
         """
         Starts the game.
 
-        Doles out hands to players,
-        prepares the pool, and
-        determines player order.
+        Prepares the pool.
 
         Returns a bool of if the game
         was successfully started or not.
@@ -491,12 +537,12 @@ class Game:
         as reference for how many should
         be in each hand.
         """
-        # the pool size but to be used as an index
-        pool_size_index = len(self.table.pool) - 1
         hands = list()
 
-        for i in range(self.game_data.max_players):
+        for i in range(len(players)):
             for _ in range(self.game_data.starting_hand_count):
+                # the pool size but to be used as an index
+                pool_size_index = len(self.table.pool) - 1
                 # take a random tile from the pool
                 tile: Tile = self.table.pool.pop(random.randint(0, pool_size_index))
                 # put it in the player's hand

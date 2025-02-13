@@ -210,7 +210,7 @@ class GameController(Controller):
         await authed(auth)
 
         # create game here
-        game = Game(game_state="ONGOING")
+        game = Game()
 
         # then, add it to the database
         insert_into_table(
@@ -460,6 +460,13 @@ class GameController(Controller):
             raise HTTPException(**does_not_exist)
 
         game_exists: bool = len(first_resulting_game) >= 1
+
+        # calling this separately in case
+        # the first result IS none, because
+        # that would throw an exception
+        if not game_exists:
+            raise HTTPException(**does_not_exist)
+
         current_game_players = get_players_in_game(con=con, gameID=game_id)
 
         game_state = run_db_command(
@@ -573,6 +580,14 @@ class GameController(Controller):
 
         # update the game turn
         self.increment_turn(game_id)
+
+    @post("/{game_id:str}/group", after_response=notify_clients_of_move)
+    async def make_group(self, request: Request, game_id: str) -> dict:
+        """
+        Attempt to make a group. Will validate
+        and respond with the new board layout.
+        """
+        pass
 
     @post("/{game_id:str}/draw", after_response=notify_clients_of_move)
     async def draw_tile(self, request: Request, game_id: str) -> Hand:
@@ -733,13 +748,13 @@ class GameController(Controller):
         auth = await is_authenticated(request)
         await authed(auth)
 
-        players = get_players_in_game(con, game_id)
+        usernames = get_players_in_game(con, game_id)
         session_id = request.get_session_id()
 
         # NOTE: this returns an AUTH ALSO
         # spent some time debugging this
         # if the user isn't in the game, tell them
-        if session_id not in players:
+        if session_id not in usernames:
             await authed(False)
 
         # grabbing the game data
@@ -752,6 +767,7 @@ class GameController(Controller):
 
         game = Game()
         game.construct_from_db(game_str, columns)
+        pool_size = len(game.table.pool)
         # remove the pool before sending it to the client
         # I *could* make a DTO but I feel like that'd needlessly
         # duplicate all other data; it's not like half of the values
@@ -778,10 +794,82 @@ class GameController(Controller):
         # and then get the last item in the list, the Hand
         hand.construct_from_db(ingame_row[0][3])
 
+
+        # ------------------------------
+        # getting the hand size and username
+        # of each player in the current game
+
+        hand_rows = run_db_command(
+            con=con,
+            command=f"SELECT userID, hand, turnNumber FROM ingame WHERE gameID == '{game_id}';"
+        )
+
+        player_sessions = dict()
+        for i, row in enumerate(hand_rows):
+            h = Hand()
+            # the first item 
+            # should be the userID (the sessionID)
+            # the second item should be the hand itself
+            logger.warning(f"row: {row}")
+            logger.warning(f"index: {i}")
+            logger.warning(f"to be hand: {row[1]}")
+            h.construct_from_db(row[1])
+            # set the session as the key
+            # and the important information as the values
+            player_sessions[row[0]] = {
+                "len_tiles": len(h.tiles),
+                "turn_number": row[2],
+            }
+
+        player_hands = list()
+
+        if player_sessions is not None and len(player_sessions) >= 1:
+            for session in player_sessions:
+                # get the username from server session storage
+                username = await SESSION_BACKEND.get(session, SESSION_FILE_STORE)
+
+                # if there isn't a session anymore,
+                # skip this user.
+                if username is None:
+                    continue
+
+                try:
+                    username = json.loads(username)["username"]
+                except KeyError:
+                    # if there somehow isn't a username,
+                    # just skip them
+                    # NOTE: keep an eye on this.
+                    continue
+
+
+                # this is a little confusing
+                # basically, append a dictionary to a list of dictionaries
+                # the list is each player and the dictionary containes information
+                # in the ingame row. The turn number can be used a psuedo-identifier
+                # to place the right amount of tiles with each person
+                player_hands.append({"username": username, **player_sessions[session]})
+
+        else:
+            raise HTTPException(
+                status_code=status_codes.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Something weird happened... you're in this game but calling the\
+                    database again returns no players at all."
+            )
+
+        # done getting the hand size and usernames
+        # ------------------------------
+
         return {
             "status_code": status_codes.HTTP_200_OK,
             "game": game,
             "hand": hand,
+            # should output a dictionary
+            # of username : len(hand)
+            # to help the client render
+            # how many tiles each user has
+            "player_data": player_hands,
+            # for rendering it properly
+            "pool_size": pool_size,
         }
 
 

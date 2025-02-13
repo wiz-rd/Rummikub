@@ -370,10 +370,6 @@ class GameController(Controller):
         hands = game.dole_out_hands(rows)
         row_to_send = None
 
-        # TODO: FIX THIS
-        # I don't know why this isn't working.
-        # It should be saving to the database,
-        # but it's not, for some reasons
         # ----------------
         # saving changed rows to db
         for i, row in enumerate(rows):
@@ -391,13 +387,12 @@ class GameController(Controller):
         today = datetime.date(datetime.now())
         update_db(
             con=con,
-            # command=f"UPDATE games SET lastActive = '{today}', tableContents = '{game.table}', currentPlayerTurn = {game.current_player_turn + 1} WHERE gameID == '{game.id}';"
             command=f"UPDATE games SET gameState = '{game.game_state}', lastActive = '{today}', tableContents = '{game.table}', currentPlayerTurn = {game.current_player_turn + 1} WHERE gameID == '{game.id}';"
         )
 
         ONGOING_GAMES.add(game_id)
 
-        # TODO: ADD "NOTIFY PLAYERS" SECTION, if necessary
+        self.notify_clients_without_turn_increment(game_id, message="start")
 
         return row_to_send
 
@@ -544,10 +539,29 @@ class GameController(Controller):
             command=f"UPDATE games SET currentPlayerTurn = currentPlayerTurn + 1 WHERE gameID == '{game_id}';"
         )
 
-    async def notify_clients_of_change(self, _: Request, game_id: str) -> None:
+    async def notify_clients_without_turn_increment(self, _: Request, game_id: str, message: str = "move") -> None:
+        """
+        Notifies clients **without** incrementing the turn counter
+        that a change has been made in a game. Useful for starting
+        games and similar situations.
+
+        Message: the message to be sent to the client.
+        """
+        # in case I forgot to add it, add it to the set
+        # shouldn't create a duplicate because it's a set
+        ONGOING_GAMES.add(game_id)
+
+        if game_id not in QUEUES:
+            QUEUES[game_id] = asyncio.Queue()
+
+        await QUEUES[game_id].put(message)
+
+    async def notify_clients_of_move(self, _: Request, game_id: str) -> None:
         """
         Adds a message to the queue for the given game ID.
         To be used to notify clients that a move has been completed.
+
+        NOTE: **Increments the turn counter for the game given.**
         """
         # update the clients
         ONGOING_GAMES.add(game_id)
@@ -555,12 +569,12 @@ class GameController(Controller):
         if game_id not in QUEUES:
             QUEUES[game_id] = asyncio.Queue()
 
-        await QUEUES[game_id].put("test")
+        await QUEUES[game_id].put("move")
 
         # update the game turn
         self.increment_turn(game_id)
 
-    @post("/{game_id:str}/draw", after_response=notify_clients_of_change)
+    @post("/{game_id:str}/draw", after_response=notify_clients_of_move)
     async def draw_tile(self, request: Request, game_id: str) -> Hand:
         """
         Make a move in the game such as draw
@@ -659,7 +673,7 @@ class GameController(Controller):
         return hand
 
     @get("/{game_id:str}/notify")
-    async def notify_changes(self, request: Request, game_id: str) -> ServerSentEvent:
+    async def notify_changes_url(self, request: Request, game_id: str) -> ServerSentEvent:
         """
         Notifies the client with an SSE when a
         change is made to the game in question,
@@ -678,6 +692,20 @@ class GameController(Controller):
                 detail=f"A game with ID {game_id} does not exist."
             )
 
+        # player validation
+        # now verifies if they are in the game
+        # ---------------------
+        players = get_players_in_game(con, game_id)
+        session_id = request.get_session_id()
+
+        # if the user isn't in the game, tell them
+        if players is None or session_id not in players:
+            raise HTTPException(
+                status_code=status_codes.HTTP_403_FORBIDDEN,
+                detail="The game does not exist or you have not joined it!"
+            )
+        # ----------------------
+        # end player validation
 
         if QUEUES.get(game_id) is None:
             QUEUES[game_id] = asyncio.Queue()

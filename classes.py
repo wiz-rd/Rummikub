@@ -102,7 +102,7 @@ class Tile:
 
     def construct_from_db(self, data: dict) -> None:
         """
-        Constructs tiles from a list.
+        Constructs tiles from a dictionary.
 
         For use on a hand returned from the database and
         already constructed from the database output.
@@ -177,7 +177,74 @@ class Group:
     """
     tiles: list[Tile] = field(default_factory=list)
 
-    def _valid(self) -> bool:
+    def _is_set(self) -> bool:
+        """
+        Determines whether or not this
+        group is a set.
+        """
+        colors = [x.color for x in self.tiles]
+        same_number = all([x.number == self.tiles[0].number for x in self.tiles])
+        used_colors = list()
+        used_colors.append(colors[0])
+
+        if not same_number:
+            return False
+
+        for i, color in enumerate(colors):
+            # if it's the first iteration
+            if i == 0:
+                continue
+
+            # make sure each color is different
+            # if any of them are the same,
+            # it's not a valid set
+            if color in used_colors:
+                return False
+
+        return same_number
+
+    def _is_run(self) -> bool:
+        """
+        Determines whether or not this
+        group is a run.
+        """
+        # making sure all colors are the same
+        # by comparing each tile's color
+        # to the first tile's color
+        all_same_color: bool = all([x.color == self.tiles[0].color for x in self.tiles])
+        nums = [x.number for x in self.tiles]
+        nums.sort()
+        past_nums = list()
+        past_nums.append(nums[0])
+
+        if not all_same_color:
+            # go ahead and skip any other check
+            return False
+
+        # checking for duplicates AND sequential order
+        for i, num in enumerate(nums):
+            # if there are any duplicates,
+            # then this isn't a run
+            if nums.count(num) > 1:
+                return False
+
+            # skip the sequence check if it's
+            # the first number in the list
+            if i == 0:
+                continue
+
+            # if it's greater than the past
+            # number at all, check if it's
+            # only ONE greater
+            if (num - past_nums[i - 1]) == 1:
+                past_nums.append(num)
+            else:
+                return False
+
+        # if it survived the "sequential" gauntlet
+        return all_same_color
+
+    def is_valid(self) -> bool:
         """
         Returns a bool of whether
         or not this group is valid.
@@ -187,35 +254,33 @@ class Group:
         if len(self.tiles) < 3:
             return False
 
-        colors = list()
-        self.is_set = True
-        for tile in self.tiles:
-            # check to see if there is
-            # a tile of the same color
-            # in the run - not allowed
-            # if it's supposed to be a set
-            try:
-                colors.index(tile.color)
-            except ValueError:
-                # this is only suspected
-                # and will need to be confirmed
-                self.is_set = False
+        is_set = self._is_run()
+        is_run = self._is_run()
 
-            colors.append(tile.color)
+        # return true if it's either a set OR a run
+        return is_set or is_run
 
     def construct_from_db(self, data: str) -> None:
         """
-        Currently does nothing. Need to implement.
+        Constructs the current object to match the database
+        when given a JSON string from said database.
+        Same as all other construct_from_db methods.
         """
-        pass
+        # just in case there are any tiles already
+        self.tiles.clear()
 
-    def __post_init__(self):
-        """
-        Upon creation of the Group,
-        validate it.
-        """
-        if not self._valid():
-            raise ValueError("The group is not a valid set or run!")
+        # if it's a string,
+        # convert it to JSON
+        if isinstance(data, str):
+            # let this err for debugging
+            data = json.loads(data)
+        elif not isinstance(data, dict):
+            raise ValueError("Data to construct must be of type string.")
+
+        for tile_str in data["tiles"]:
+            tile = Tile()
+            tile.construct_from_db(tile_str)
+            self.tiles.append(tile)
 
     # # this value is purely for cosmetic purposes,
     # # but potentially we can use it for another scoring

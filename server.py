@@ -305,7 +305,10 @@ class GameController(Controller):
         # spent some time debugging this
         # if the user isn't in the game, tell them
         if session_id not in players:
-            await authed(False)
+            raise HTTPException(
+                status_code=status_codes.HTTP_403_FORBIDDEN,
+                detail="User is not a part of this game or the game does not exist."
+            )
 
         # --------------------
 
@@ -541,7 +544,7 @@ class GameController(Controller):
         """
         Increments the turn for the given game ID.
         """
-        run_db_command(
+        update_db(
             con=con,
             command=f"UPDATE games SET currentPlayerTurn = currentPlayerTurn + 1 WHERE gameID == '{game_id}';"
         )
@@ -581,15 +584,119 @@ class GameController(Controller):
         # update the game turn
         self.increment_turn(game_id)
 
-    @post("/{game_id:str}/group", after_response=notify_clients_of_move)
-    async def make_group(self, request: Request, game_id: str) -> dict:
+    @put("/{game_id:str}/group")
+    async def make_group(self, request: Request, game_id: str, data: Group) -> dict:
         """
         Attempt to make a group. Will validate
         and respond with the new board layout.
         """
-        pass
+        auth = await is_authenticated(request)
+        await authed(auth)
 
-    @post("/{game_id:str}/draw", after_response=notify_clients_of_move)
+        # ---------------------
+        # preliminary group validation
+
+        # this should be a bit less intensive
+        # than checking if the player is even in that game
+        # so I'm going to do this first, because
+        # if it's invalid it doesn't matter if they're
+        # in the game or not
+
+        group = Group()
+
+        try:
+            group.construct_from_db(data)
+        except JSONDecodeError:
+            raise HTTPException(
+                # this isn't the exact right error
+                # message for this, but I like it
+                # and it's distinct from a 400 error
+                status_code=status_codes.HTTP_412_PRECONDITION_FAILED,
+                detail="The group was formatted incorrectly."
+            )
+        # -----------------------
+
+        # -----------------------
+        # player validation
+        players = get_players_in_game(con, game_id)
+        session_id = request.get_session_id()
+
+        # NOTE: this returns an AUTH ALSO
+        # spent some time debugging this
+        # if the user isn't in the game, tell them
+        if session_id not in players:
+            raise HTTPException(
+                status_code=status_codes.HTTP_403_FORBIDDEN,
+                detail="User is not a part of this game or the game does not exist."
+            )
+        # ------------------------
+
+        # ------------------------
+        # quick group validation before
+        # submitting it to the game
+        if not group.is_valid():
+            raise HTTPException(
+                status_code=status_codes.HTTP_400_BAD_REQUEST,
+                detail="The group is invalid!"
+            )
+        # ------------------------
+
+        # ------------------------
+        # make sure it's the player's turn
+        ingame_from_db = run_db_command(
+            con=con,
+            command=f"SELECT turnNumber, hand FROM ingame WHERE gameID == '{game_id}' AND userID == '{session_id}';"
+        )[0]
+
+        player_hand = Hand()
+        player_hand_str = ingame_from_db[1]
+        player_hand.construct_from_db(player_hand_str)
+
+        game_str, _ = get_game_data(con, game_id)
+        game = Game()
+        game.construct_from_db(game_str)
+
+        # section copied from draw_tile()
+        current_players_turn = ingame_from_db[0]
+
+        # for explanation of cycle, = ctrl + F cycle
+        cycle = game.current_player_turn % game.game_data.max_players
+
+        if cycle != current_players_turn:
+            raise HTTPException(
+                status_code=status_codes.HTTP_403_FORBIDDEN,
+                detail="It is isn't your turn!"
+            )
+        # end of section
+        # -------------------------
+
+        # -------------------------
+        # now update game and player data
+        for tile in group.tiles:
+            # remove each tile used to make the group
+            player_hand.tiles.remove(tile)
+
+        game.table.groups.append(group)
+        # --------------------------
+
+        # --------------------------
+        # update the database to reflect these changes
+        # update game table
+        update_db(
+            con=con,
+            command=f"UPDATE game SET tableContents = '{game.table}' WHERE gameID == '{game_id}';"
+        )
+
+        # update ingame table to reflect hand
+        update_db(
+            con=con,
+            command=f"UPDATE ingame SET hand = '{player_hand}' WHERE gameID == '{game_id}' AND userID == '{session_id}';"
+        )
+
+        self.notify_clients_of_move(request, game_id=game_id)
+        return player_hand
+
+    @put("/{game_id:str}/draw")
     async def draw_tile(self, request: Request, game_id: str) -> Hand:
         """
         Make a move in the game such as draw
@@ -607,7 +714,10 @@ class GameController(Controller):
         # spent some time debugging this
         # if the user isn't in the game, tell them
         if session_id not in players:
-            await authed(False)
+            raise HTTPException(
+                status_code=status_codes.HTTP_403_FORBIDDEN,
+                detail="User is not a part of this game or the game does not exist."
+            )
 
         # --------------------
 
@@ -685,6 +795,12 @@ class GameController(Controller):
             command=f"UPDATE ingame SET hand = '{hand}';"
         )
 
+        # have to calle this manually because
+        # if I have it called "after_response"
+        # it'll call and increment the turn even if this fails
+        # as well as add the game_id to ongoing games
+        self.notify_clients_of_move(request, game_id=game_id)
+
         return hand
 
     @get("/{game_id:str}/notify")
@@ -714,7 +830,7 @@ class GameController(Controller):
         session_id = request.get_session_id()
 
         # if the user isn't in the game, tell them
-        if players is None or session_id not in players:
+        if session_id not in players:
             raise HTTPException(
                 status_code=status_codes.HTTP_403_FORBIDDEN,
                 detail="The game does not exist or you have not joined it!"
@@ -755,7 +871,10 @@ class GameController(Controller):
         # spent some time debugging this
         # if the user isn't in the game, tell them
         if session_id not in usernames:
-            await authed(False)
+            raise HTTPException(
+                status_code=status_codes.HTTP_403_FORBIDDEN,
+                detail="User is not a part of this game or the game does not exist."
+            )
 
         # grabbing the game data
         # both game_str and columns should be lists
@@ -810,9 +929,6 @@ class GameController(Controller):
             # the first item 
             # should be the userID (the sessionID)
             # the second item should be the hand itself
-            logger.warning(f"row: {row}")
-            logger.warning(f"index: {i}")
-            logger.warning(f"to be hand: {row[1]}")
             h.construct_from_db(row[1])
             # set the session as the key
             # and the important information as the values

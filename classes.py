@@ -182,15 +182,16 @@ class Group:
         Determines whether or not this
         group is a set.
         """
-        colors = [x.color for x in self.tiles]
-        same_number = all([x.number == self.tiles[0].number for x in self.tiles])
+        # they are either the same number or a joker
+        # calling an explicit equals so it's a bit clearer
+        same_number = all([(x.number == self.tiles[0].number) or (x.joker == True) for x in self.tiles])
         used_colors = list()
-        used_colors.append(colors[0])
+        used_colors.append(self.tiles[0].color)
 
         if not same_number:
             return False
 
-        for i, color in enumerate(colors):
+        for i, tile in enumerate(self.tiles):
             # if it's the first iteration
             if i == 0:
                 continue
@@ -198,12 +199,13 @@ class Group:
             # make sure each color is different
             # if any of them are the same,
             # it's not a valid set
-            if color in used_colors:
+            # unless that tile is a joker
+            if tile.color in used_colors and not tile.joker:
                 return False
 
         return same_number
 
-    def _is_run(self) -> bool:
+    def _is_run(self, min_tile: int, max_tile: int) -> bool:
         """
         Determines whether or not this
         group is a run.
@@ -211,40 +213,123 @@ class Group:
         # making sure all colors are the same
         # by comparing each tile's color
         # to the first tile's color
-        all_same_color: bool = all([x.color == self.tiles[0].color for x in self.tiles])
-        nums = [x.number for x in self.tiles]
-        nums.sort()
-        past_nums = list()
-        past_nums.append(nums[0])
+        # making allowances for jokers
+        all_same_color: bool = all([(x.color == self.tiles[0].color) or (x.joker == True) for x in self.tiles])
 
         if not all_same_color:
             # go ahead and skip any other check
             return False
 
-        # checking for duplicates AND sequential order
-        for i, num in enumerate(nums):
-            # if there are any duplicates,
-            # then this isn't a run
-            if nums.count(num) > 1:
-                return False
+        # get all joker tiles
+        joker_tiles: list[Tile] = [x for x in self.tiles if x.joker]
+        jokers_to_spare: bool = len(joker_tiles) > 0
 
-            # skip the sequence check if it's
-            # the first number in the list
+        # make sure all joker tiles
+        # are never falsely flagged as sequential
+        for tile in joker_tiles:
+            tile.number = min_tile - 10
+
+        # get all non-joker tiles
+        numbered_tiles: list[Tile] = sorted([x for x in self.tiles if not x.joker])
+
+        # prepare a list to set the output to
+        output_list: list[Tile] = list()
+
+        # -------------------------
+        # check if it's sequential
+        for i, tile in enumerate(numbered_tiles):
+            # skip the first check
             if i == 0:
+                output_list.append(tile)
                 continue
 
-            # if it's greater than the past
-            # number at all, check if it's
-            # only ONE greater
-            if (num - past_nums[i - 1]) == 1:
-                past_nums.append(num)
+            next_tile: Tile = numbered_tiles[i - 1]
+
+            # if it is one, it's sequential
+            sequential: bool = abs(tile.number - next_tile.number) == 1
+
+            if sequential:
+                output_list.append(tile)
+                continue
+
+            # if NOT sequential
+            # -----------------
+            output_list.append(tile)
+
+            # for use in calculating if there are
+            # enough jokers to fill the gap
+            current_num: int = tile.number
+
+            # this should only be ran if
+            # the sequential check failed
+            # e.g. if there's a "gap" to be filled
+            while True:
+                jokers_to_spare: bool = len(joker_tiles) > 0
+                local_seq: bool = abs(current_num - next_tile.number) == 1
+
+                # if we've run out of jokers but it still isn't sequential
+                if not local_seq and not jokers_to_spare:
+                    return False
+                # if we made it sequential, break
+                # regardless of how many jokers are left
+                elif local_seq:
+                    break
+
+                # if there are jokers
+                # and it's not sequential
+                # "use" the jokers to fill the spaces
+                output_list.append(joker_tiles.pop())
+                current_num += 1
+            # once the gap is filled,
+            # start over from the next numbered tile
+            # to see if it's sequential to the following tiles
+        # --------------------
+
+        # just in case some funny business happened
+        jokers_to_spare: bool = len(joker_tiles) > 0
+
+        # --------------------
+        # dole out remaining jokers
+
+        # this WILL reorder user input
+        # but only if they put jokers at the
+        # beginning or end, so I'm okay with it,
+        # at least for now
+        if jokers_to_spare:
+            # if there is enough "space" at the beginning
+            # or end for all remaining jokers
+            can_fit_at_end = len(jokers_to_spare) <= (max_tile - max(numbered_tiles))
+            can_fit_at_beginning = len(jokers_to_spare) <= (min(numbered_tiles) - min_tile)
+
+            # if there is a joker,
+            # it IS sequential (see last check)
+            # and there is no place for the extra jokers to go
+            if not can_fit_at_end and not can_fit_at_beginning:
+                return False
+            elif can_fit_at_beginning and not can_fit_at_end:
+                # put all unused jokers at the beginning
+                self.tiles = joker_tiles + output_list
+            elif can_fit_at_end and not can_fit_at_beginning:
+                # put all unused jokers at the end
+                self.tiles = output_list + joker_tiles
+            # if it has neither the largest nor the smallest tiles
+            elif can_fit_at_beginning and can_fit_at_end:
+                # just default to putting the extras at the end
+                self.tiles = output_list + joker_tiles
+            # something went wrong
             else:
                 return False
+        else:
+            # update hand to be sorted
+            # so that users can't submit
+            # hands out of order
+            self.tiles = output_list
+        # ------------------
 
         # if it survived the "sequential" gauntlet
         return all_same_color
 
-    def is_valid(self) -> bool:
+    def is_valid(self, max_tile_number: int, min_tile_number: int) -> bool:
         """
         Returns a bool of whether
         or not this group is valid.
@@ -254,8 +339,8 @@ class Group:
         if len(self.tiles) < 3:
             return False
 
-        is_set = self._is_run()
-        is_run = self._is_run()
+        is_set = self._is_set()
+        is_run = self._is_run(min_tile_number, max_tile_number)
 
         # return true if it's either a set OR a run
         return is_set or is_run

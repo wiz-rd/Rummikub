@@ -584,37 +584,24 @@ class GameController(Controller):
         # update the game turn
         self.increment_turn(game_id)
 
-    @put("/{game_id:str}/group")
-    async def make_group(self, request: Request, game_id: str, data: Group) -> dict:
+    @put("/{game_id:str}/groups")
+    async def make_groups(self, request: Request, game_id: str, data: Table) -> Hand:
         """
-        Attempt to make a group. Will validate
+        Attempt to make or rearrange groups. Will validate
         and respond with the new board layout.
+
+        Needs the table so the server can see and validate
+        all changes made to each group and order, etc.
         """
         auth = await is_authenticated(request)
         await authed(auth)
 
-        # ---------------------
-        # preliminary group validation
-
-        # this should be a bit less intensive
-        # than checking if the player is even in that game
-        # so I'm going to do this first, because
-        # if it's invalid it doesn't matter if they're
-        # in the game or not
-
-        group = Group()
-
-        try:
-            group.construct_from_db(data)
-        except JSONDecodeError:
-            raise HTTPException(
-                # this isn't the exact right error
-                # message for this, but I like it
-                # and it's distinct from a 400 error
-                status_code=status_codes.HTTP_412_PRECONDITION_FAILED,
-                detail="The group was formatted incorrectly."
-            )
-        # -----------------------
+        for group in data.groups:
+            if not group.is_valid():
+                raise HTTPException(
+                    status_code=status_codes.HTTP_400_BAD_REQUEST,
+                    detail="At least one group is invalid!"
+                )
 
         # -----------------------
         # player validation
@@ -632,37 +619,27 @@ class GameController(Controller):
         # ------------------------
 
         # ------------------------
-        # quick group validation before
-        # submitting it to the game
-        if not group.is_valid():
-            raise HTTPException(
-                status_code=status_codes.HTTP_400_BAD_REQUEST,
-                detail="The group is invalid!"
-            )
-        # ------------------------
-
-        # ------------------------
         # make sure it's the player's turn
         ingame_from_db = run_db_command(
             con=con,
             command=f"SELECT turnNumber, hand FROM ingame WHERE gameID == '{game_id}' AND userID == '{session_id}';"
         )[0]
 
-        player_hand = Hand()
+        hand_from_db = Hand()
         player_hand_str = ingame_from_db[1]
-        player_hand.construct_from_db(player_hand_str)
+        hand_from_db.construct_from_db(player_hand_str)
 
         game_str, _ = get_game_data(con, game_id)
         game = Game()
         game.construct_from_db(game_str)
 
         # section copied from draw_tile()
-        current_players_turn = ingame_from_db[0]
+        this_players_turn = ingame_from_db[0]
 
-        # for explanation of cycle, = ctrl + F cycle
+        # for explanation of cycle, ctrl + F cycle
         cycle = game.current_player_turn % game.game_data.max_players
 
-        if cycle != current_players_turn:
+        if cycle != this_players_turn:
             raise HTTPException(
                 status_code=status_codes.HTTP_403_FORBIDDEN,
                 detail="It is isn't your turn!"
@@ -671,11 +648,55 @@ class GameController(Controller):
         # -------------------------
 
         # -------------------------
-        # now update game and player data
-        for tile in group.tiles:
-            # remove each tile used to make the group
-            player_hand.tiles.remove(tile)
+        # more data validation
 
+        # check the difference between
+        # the proposed table and the current table
+        # and see if we can "make up" that
+        # difference with tiles in their hand
+
+        # all tiles in the new groups that are NOT in the old groups
+        new_tiles_diff = [x for x in data.groups if x not in game.table.groups]
+
+        new_table_total_tiles = 0
+        old_table_total_tiles = 0
+
+        # set the variables to their correct amounts
+        for group in game.table.groups:
+            old_table_total_tiles += len(group.tiles)
+        for group in data.groups:
+            new_table_total_tiles += len(group.tiles)
+
+        # if there are tiles that were on the old table but not the new one
+        if new_table_total_tiles < old_table_total_tiles:
+            raise HTTPException(
+                status_code=status_codes.HTTP_400_BAD_REQUEST,
+                detail="The table provided is missing pieces. You're tweaking with requests, aren't you?\
+                    Your IP address has been noted."  # it hasn't been. This is just to dissuade people
+            )
+        # if they are the same in length, either no tiles were placed
+        # or some were placed and some were (at least attempted to be) "picked up"
+        elif new_table_total_tiles == old_table_total_tiles:
+            raise HTTPException(
+                status_code=status_codes.HTTP_409_CONFLICT,
+                detail="User has to place down at least one tile."
+            )
+
+        # ALL new tiles MUST be from the user's hand
+        for tile in new_tiles_diff:
+            if tile not in hand_from_db.tiles:
+                raise HTTPException(
+                    status_code=status_codes.HTTP_403_FORBIDDEN,
+                    detail=f"User does not have all of the required tiles: {new_tiles_diff}"
+                )
+
+            # remove the tile with that number/color
+            # from their hand so it won't be referenced again
+            # i.e. "use" the tile
+            hand_from_db.tiles.remove(tile)
+
+        # --------------------------
+        # add to game table
         game.table.groups.append(group)
         # --------------------------
 
@@ -690,11 +711,11 @@ class GameController(Controller):
         # update ingame table to reflect hand
         update_db(
             con=con,
-            command=f"UPDATE ingame SET hand = '{player_hand}' WHERE gameID == '{game_id}' AND userID == '{session_id}';"
+            command=f"UPDATE ingame SET hand = '{hand_from_db}' WHERE gameID == '{game_id}' AND userID == '{session_id}';"
         )
 
         self.notify_clients_of_move(request, game_id=game_id)
-        return player_hand
+        return hand_from_db
 
     @put("/{game_id:str}/draw")
     async def draw_tile(self, request: Request, game_id: str) -> Hand:
@@ -1061,7 +1082,7 @@ async def api_base_route() -> dict[str, str]:
     Returns a simple success message indicating the
     API/server is functioning properly.
     """
-    return {"status_code": status_codes.HTTP_200_OK, "detail": "The API is up and running."}
+    return {"detail": "The API is up and running."}
 
 
 @get("/clear")
@@ -1113,6 +1134,23 @@ async def api_clear_sessions() -> None:
                 # though, so it's actually good it didn't work
                 command=f"DELETE FROM ingame WHERE userID == '{pl}';"
             )
+
+
+@get("/validate")
+async def check_if_group_valid(data: Group) -> Group | bool:
+    """
+    Checks if the group is valid when compared
+    to default game rules.
+    """
+    default_settings = GameSettings()
+    valid = data.is_valid(default_settings.max_tile, default_settings.min_tile)
+    # if it's valid, return the right order
+    # so that the user's sequence changes on their screen
+    # before they "commit" or finalize their turn
+    if valid:
+        return data
+    else:
+        return False
 
 
 ################

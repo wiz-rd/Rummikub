@@ -566,7 +566,7 @@ class GameController(Controller):
 
         await QUEUES[game_id].put(message)
 
-    async def notify_clients_of_move(self, _: Request, game_id: str) -> None:
+    async def notify_clients_of_move(self, req: Request, game_id: str) -> None:
         """
         Adds a message to the queue for the given game ID.
         To be used to notify clients that a move has been completed.
@@ -583,6 +583,37 @@ class GameController(Controller):
 
         # update the game turn
         self.increment_turn(game_id)
+
+        if self.check_for_win(req, game_id):
+            # update the game to be ended
+            update_db(
+                con=con,
+                command=f"UPDATE game SET gameState = 'ENDED' WHERE gameID == '{game_id}';"
+            )
+            # the player who won is whoever's turn it ends on
+            await self.notify_clients_without_turn_increment(req, game_id, "end")
+            # remove it from ongoing games
+            ONGOING_GAMES.remove(game_id)
+
+    async def check_for_win(self, req: Request, game_id: str) -> bool:
+        """
+        Check if a player has won the game or not.
+        One wins by emptying their hand of all tiles.
+        """
+        user_id = req.get_session_id()
+
+        hand_str = run_db_command(
+            con=con,
+            command=f"SELECT hand FROM ingame WHERE userID == '{user_id}' AND gameID == '{game_id}';"
+        )[0]
+
+        hand = Hand()
+        hand.construct_from_db(hand_str)
+
+        if len(hand.tiles) == 0:
+            return True
+        else:
+            return False
 
     @put("/{game_id:str}/groups")
     async def make_groups(self, request: Request, game_id: str, data: Table) -> Hand:

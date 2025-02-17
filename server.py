@@ -395,7 +395,7 @@ class GameController(Controller):
 
         ONGOING_GAMES.add(game_id)
 
-        self.notify_clients_without_turn_increment(game_id, message="start")
+        self.notify_clients_without_turn_increment(request, game_id, message="start")
 
         return row_to_send
 
@@ -748,6 +748,18 @@ class GameController(Controller):
         self.notify_clients_of_move(request, game_id=game_id)
         return hand_from_db
 
+    @put("/{game_id:str}/ping")
+    async def test_method(self, request: Request, game_id: str) -> None:
+        """
+        A simple helper method to test SSEs for clients
+        without making any actual changes to the game.
+
+        Should be deleted before production.
+
+        TODO NOTE: DELETE
+        """
+        await self.notify_clients_without_turn_increment(request, game_id)
+
     @put("/{game_id:str}/draw")
     async def draw_tile(self, request: Request, game_id: str) -> Hand:
         """
@@ -802,7 +814,7 @@ class GameController(Controller):
 
         # to validate that it is, in fact, the
         # player's turn before giving them a tile
-        current_turn = ingame_row[2]
+        current_turn = ingame_row[0][2]
 
         # cycle = whoever's turn it SHOULD be
         # e.g. if it's turn 20, then whoever has
@@ -851,7 +863,7 @@ class GameController(Controller):
         # if I have it called "after_response"
         # it'll call and increment the turn even if this fails
         # as well as add the game_id to ongoing games
-        self.notify_clients_of_move(request, game_id=game_id)
+        await self.notify_clients_of_move(request, game_id=game_id)
 
         return hand
 
@@ -903,7 +915,7 @@ class GameController(Controller):
             """
             while game_id in ONGOING_GAMES:
                 data = await q.get()
-                yield data
+                yield ServerSentEventMessage(data)
 
         return ServerSentEvent(sse())
 

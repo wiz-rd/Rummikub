@@ -1,0 +1,8 @@
+[gd_resource type="LabelSettings" load_steps=2 format=3 uid="uid://ch4mc0tooq3ma"]
+
+[ext_resource type="FontFile" uid="uid://dialf8wpr6fpc" path="res://resources/fonts/Jersey_15/Jersey15-Regular.ttf" id="1_rjph4"]
+
+[resource]
+font = ExtResource("1_rjph4")
+font_size = 74
+font_color = Color(0, 0, 0, 1)

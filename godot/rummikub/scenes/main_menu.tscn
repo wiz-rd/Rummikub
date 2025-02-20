@@ -1,0 +1,112 @@
+[gd_scene load_steps=4 format=3 uid="uid://clioyt65g71v1"]
+
+[ext_resource type="Script" path="res://scripts/main_menu.gd" id="1_fp5wg"]
+[ext_resource type="Theme" uid="uid://b4k17n0bd3vbh" path="res://resources/ui_theme.tres" id="1_fyv62"]
+[ext_resource type="FontFile" uid="uid://dialf8wpr6fpc" path="res://resources/fonts/Jersey_15/Jersey15-Regular.ttf" id="2_1l4fn"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_fp5wg")
+
+[node name="MenuBackground" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0.368627, 0.152941, 1)
+
+[node name="MenuOptions" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -896.0
+offset_top = -476.0
+offset_right = 896.0
+offset_bottom = 476.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MenuLogin" type="RichTextLabel" parent="MenuOptions"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -255.5
+offset_right = 255.5
+offset_bottom = 138.0
+grow_horizontal = 2
+theme = ExtResource("1_fyv62")
+theme_override_fonts/normal_font = ExtResource("2_1l4fn")
+theme_override_font_sizes/normal_font_size = 140
+bbcode_enabled = true
+text = "[center][wave]Nummikub[/wave][/center]"
+fit_content = true
+scroll_active = false
+
+[node name="ButtonContainer" type="VBoxContainer" parent="MenuOptions"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -276.0
+offset_top = -196.0
+offset_right = 276.0
+offset_bottom = 196.0
+grow_horizontal = 2
+grow_vertical = 2
+alignment = 1
+
+[node name="StartButton" type="Button" parent="MenuOptions/ButtonContainer"]
+layout_mode = 2
+theme = ExtResource("1_fyv62")
+text = "Start"
+
+[node name="Spacer" type="Control" parent="MenuOptions/ButtonContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SettingsButton" type="Button" parent="MenuOptions/ButtonContainer"]
+layout_mode = 2
+theme = ExtResource("1_fyv62")
+text = "Settings"
+
+[node name="Spacer2" type="Control" parent="MenuOptions/ButtonContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Button" type="Button" parent="MenuOptions/ButtonContainer"]
+layout_mode = 2
+theme = ExtResource("1_fyv62")
+text = "Attributions"
+
+[node name="Label" type="Label" parent="MenuOptions"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -696.5
+offset_top = -36.0
+offset_right = 696.5
+grow_horizontal = 2
+grow_vertical = 0
+theme = ExtResource("1_fyv62")
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_fonts/font = ExtResource("2_1l4fn")
+theme_override_font_sizes/font_size = 35
+text = "This website needs cookies to operate. By continuing to use this site, you consent to our usage of cookies."
+
+[connection signal="pressed" from="MenuOptions/ButtonContainer/StartButton" to="." method="_on_start_button_pressed"]

@@ -1,0 +1,165 @@
+[gd_scene load_steps=4 format=3 uid="uid://dfj1455wrc3bs"]
+
+[ext_resource type="Theme" uid="uid://b4k17n0bd3vbh" path="res://resources/ui_theme.tres" id="1_c7kov"]
+[ext_resource type="Theme" uid="uid://cpnw4fnh7oc1" path="res://resources/tile_and_font_theme.tres" id="1_lqy8q"]
+
+[sub_resource type="PlaceholderTexture2D" id="PlaceholderTexture2D_hrs57"]
+
+[node name="Table" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TableColor" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0.368627, 0.152941, 1)
+
+[node name="Rack" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -960.0
+offset_top = -324.0
+offset_right = 190.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="ColorRect" type="ColorRect" parent="Rack"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -490.0
+offset_top = -280.0
+offset_right = 490.0
+grow_horizontal = 2
+grow_vertical = 0
+color = Color(0.111829, 0.138253, 0.480896, 1)
+
+[node name="Pool" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -857.0
+offset_top = -487.0
+grow_horizontal = 0
+grow_vertical = 0
+
+[node name="PoolCountBg" type="Panel" parent="Pool"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -336.0
+offset_top = -36.0
+offset_right = 336.0
+offset_bottom = 36.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_c7kov")
+
+[node name="PoolPlaceholderImg" type="TextureRect" parent="Pool"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -341.5
+offset_top = -185.0
+offset_right = 342.5
+grow_horizontal = 2
+grow_vertical = 0
+texture = SubResource("PlaceholderTexture2D_hrs57")
+
+[node name="PoolTileCount" type="Label" parent="Pool"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -154.5
+offset_top = -27.5
+offset_right = 154.5
+offset_bottom = 27.5
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_lqy8q")
+text = "Tiles left: NUM"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PlayerRegion0" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_top = -247.0
+offset_right = 228.0
+offset_bottom = 247.0
+grow_vertical = 2
+
+[node name="PlayerRegion1" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -368.5
+offset_right = 368.5
+offset_bottom = 228.0
+grow_horizontal = 2
+
+[node name="PlayerRegion2" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -228.0
+offset_top = -247.0
+offset_bottom = 247.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="UsernamePadding" type="Control" parent="."]
+anchors_preset = 0
+offset_right = 528.0
+offset_bottom = 128.0
+
+[node name="Username" type="Label" parent="UsernamePadding"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -228.0
+offset_top = -40.5
+offset_right = 228.0
+offset_bottom = 40.5
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_c7kov")
+horizontal_alignment = 1
+vertical_alignment = 2
+text_overrun_behavior = 3

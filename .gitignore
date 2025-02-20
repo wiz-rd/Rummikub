@@ -1,3 +1,9 @@
-/*/
+# all virtual environments
+/*venv*/
+# all dot folders
+/.*/
+/__pycache__/
+/data/
 *.log
-todo
+# godot addons that should be able to be downloaded elsewhere
+/godot/*/addons/

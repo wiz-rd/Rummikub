@@ -1,0 +1,55 @@
+[gd_scene load_steps=2 format=3 uid="uid://cmmuiw36pqq7p"]
+
+[ext_resource type="Theme" uid="uid://b4k17n0bd3vbh" path="res://resources/ui_theme.tres" id="1_orhwq"]
+
+[node name="Attributions" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0.368627, 0.152941, 1)
+
+[node name="Container" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -864.0
+offset_top = -226.0
+offset_right = 864.0
+offset_bottom = 226.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="GearIcon" type="LinkButton" parent="Container"]
+layout_mode = 1
+offset_right = 269.0
+offset_bottom = 79.0
+theme = ExtResource("1_orhwq")
+text = "Gear Icon"
+uri = "https://www.iconfinder.com/icons/5402442/settings_cog_configuration_gear_options_preferences_tools_icon"
+
+[node name="LinkButton" type="LinkButton" parent="Container"]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_top = -39.5
+offset_right = 786.0
+offset_bottom = 39.5
+grow_vertical = 2
+theme = ExtResource("1_orhwq")
+text = "Roboto and Jersey 15 fonts"
+uri = "https://fonts.google.com"

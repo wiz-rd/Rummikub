@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Rummikub"
-run/main_scene="res://scenes/table.tscn"
+run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 
 [autoload]
@@ -26,7 +26,7 @@ window/stretch/mode="viewport"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/http_event_source/plugin.cfg")
+enabled=PackedStringArray("res://addons/cookie_http_request/plugin.cfg", "res://addons/http_event_source/plugin.cfg")
 
 [rendering]
 

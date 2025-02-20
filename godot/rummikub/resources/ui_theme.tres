@@ -22,6 +22,7 @@ corner_radius_bottom_left = 20
 [resource]
 default_font = ExtResource("2_fhge6")
 default_font_size = 78
+Button/colors/font_hover_color = Color(0.497472, 0.497474, 0.497475, 1)
 Button/font_sizes/font_size = 64
 Button/styles/disabled = SubResource("StyleBoxEmpty_milcy")
 Button/styles/focus = SubResource("StyleBoxEmpty_hlfm6")

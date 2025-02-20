@@ -1,53 +1,9 @@
-[gd_scene load_steps=3 format=3 uid="uid://btxieasvw4cj8"]
+[gd_scene load_steps=5 format=3 uid="uid://btxieasvw4cj8"]
 
 [ext_resource type="Theme" uid="uid://b4k17n0bd3vbh" path="res://resources/ui_theme.tres" id="1_12tyf"]
-
-[sub_resource type="GDScript" id="GDScript_qgshv"]
-script/source = "extends Control
-
-var server_url: String = \"localhost\"
-var port: int = 8000
-var api_string: String = \"/api\"
-# TODO:
-# This will have to be updated to remove the port
-# once the site is published externally
-var api_url: String = server_url + \":\" + str(port) + api_string
-
-
-func create_username(username: String):
-	\"\"\"
-	Creates a username on the server.
-	\"\"\"
-	# using a CookieHTTPRequest instead of a
-	# standard HTTPRequest SHOULD store the
-	# cookies automatically
-	var req := CookieHTTPRequest.new()
-	req.cookie_request(
-		# the username is set based on the URL
-		api_url + \"/user/\" + username,
-		# no special headers are needed
-		[\"\"],
-		# put the username
-		HTTPClient.Method.METHOD_PUT
-	)
-
-
-func get_username() -> String:
-	\"\"\"
-	Informs the user of what the server has
-	stored as their username.
-	\"\"\"
-	var req := CookieHTTPRequest.new()
-	var val = req.cookie_request(
-		# the username is set based on the URL
-		api_url + \"/user\",
-		# no special headers are needed
-		[\"\"],
-		# put the username
-		HTTPClient.Method.METHOD_GET
-	)
-	return val
-"
+[ext_resource type="PackedScene" uid="uid://nox3o0e436mg" path="res://scenes/background.tscn" id="1_61ki1"]
+[ext_resource type="Script" path="res://scripts/create_session.gd" id="1_tf32q"]
+[ext_resource type="PackedScene" uid="uid://blo5uei2xfe0l" path="res://scenes/session_handler.tscn" id="4_3tmd4"]
 
 [node name="CreateSession" type="Control"]
 layout_mode = 3
@@ -56,18 +12,12 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = SubResource("GDScript_qgshv")
+script = ExtResource("1_tf32q")
 
-[node name="ColorRect" type="ColorRect" parent="."]
+[node name="Background" parent="." instance=ExtResource("1_61ki1")]
 layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0, 0.368627, 0.152941, 1)
 
-[node name="Contents" type="Control" parent="."]
+[node name="LoginContents" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -81,7 +31,7 @@ offset_bottom = 479.5
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="ButtonAndField" type="VBoxContainer" parent="Contents"]
+[node name="ButtonAndField" type="VBoxContainer" parent="LoginContents"]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -96,18 +46,22 @@ grow_horizontal = 2
 grow_vertical = 2
 alignment = 1
 
-[node name="LineEdit" type="LineEdit" parent="Contents/ButtonAndField"]
+[node name="UsernameField" type="LineEdit" parent="LoginContents/ButtonAndField"]
 layout_mode = 2
 theme = ExtResource("1_12tyf")
 placeholder_text = "Enter your username"
 alignment = 1
-max_length = 10
+max_length = 20
 
-[node name="Spacer" type="Control" parent="Contents/ButtonAndField"]
+[node name="Spacer" type="Control" parent="LoginContents/ButtonAndField"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="Button" type="Button" parent="Contents/ButtonAndField"]
+[node name="LoginButton" type="Button" parent="LoginContents/ButtonAndField"]
 layout_mode = 2
 theme = ExtResource("1_12tyf")
 text = "Login"
+
+[node name="SessionHandler" parent="." instance=ExtResource("4_3tmd4")]
+
+[connection signal="pressed" from="LoginContents/ButtonAndField/LoginButton" to="." method="_on_login_button_pressed"]

@@ -1,9 +1,8 @@
-[gd_scene load_steps=5 format=3 uid="uid://btxieasvw4cj8"]
+[gd_scene load_steps=4 format=3 uid="uid://btxieasvw4cj8"]
 
 [ext_resource type="Theme" uid="uid://b4k17n0bd3vbh" path="res://resources/ui_theme.tres" id="1_12tyf"]
 [ext_resource type="PackedScene" uid="uid://nox3o0e436mg" path="res://scenes/background.tscn" id="1_61ki1"]
 [ext_resource type="Script" path="res://scripts/create_session.gd" id="1_tf32q"]
-[ext_resource type="PackedScene" uid="uid://blo5uei2xfe0l" path="res://scenes/session_handler.tscn" id="4_3tmd4"]
 
 [node name="CreateSession" type="Control"]
 layout_mode = 3
@@ -38,10 +37,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -278.0
-offset_top = -143.5
-offset_right = 279.0
-offset_bottom = 52.5
+offset_left = -278.5
+offset_top = -151.0
+offset_right = 278.5
+offset_bottom = 151.0
 grow_horizontal = 2
 grow_vertical = 2
 alignment = 1
@@ -62,6 +61,14 @@ layout_mode = 2
 theme = ExtResource("1_12tyf")
 text = "Login"
 
-[node name="SessionHandler" parent="." instance=ExtResource("4_3tmd4")]
+[node name="Spacer2" type="Control" parent="LoginContents/ButtonAndField"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MenuButton" type="Button" parent="LoginContents/ButtonAndField"]
+layout_mode = 2
+theme = ExtResource("1_12tyf")
+text = "Menu"
 
 [connection signal="pressed" from="LoginContents/ButtonAndField/LoginButton" to="." method="_on_login_button_pressed"]
+[connection signal="pressed" from="LoginContents/ButtonAndField/MenuButton" to="." method="_on_menu_button_pressed"]

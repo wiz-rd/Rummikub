@@ -1,9 +1,10 @@
 extends Node
 
-var username: String
-var server_url: String = "http://127.0.0.1"
+const server_url: String = "http://127.0.0.1"
+const api_string: String = "/api"
 var port: int = 8000
-var api_string: String = "/api"
+var username: String
+
 # TODO:
 # This will have to be updated to remove the port
 # once the site is published externally
@@ -22,14 +23,13 @@ func create_username(usrnm: String):
 
 	# TODO: delete debugging
 	var full_url = api_url + "/user/" + usrnm
-	print(full_url)
 
 	req.request_completed.connect(_on_create_username)
 	var error = req.cookie_request(
 		# the username is set based on the URL
 		full_url,
 		# no special headers are needed
-		[],
+		HTTPCookieStore._retrieve_cookies_for_header(server_url),
 		# put the username
 		HTTPClient.Method.METHOD_PUT
 	)
@@ -47,17 +47,20 @@ func get_username():
 
 	# TODO: delete debugging
 	var full_url = api_url + "/user"
-	print(full_url)
+
+	var session_id = HTTPCookieStore.get_cookie_header_for_request(server_url)
+	if session_id == null:
+		session_id = HTTPCookieStore._retrieve_cookies_for_header(server_url)
 
 	req.request_completed.connect(_on_get_username)
-	var error = req.cookie_request(full_url)
-		## the username is set based on the URL
-		#full_url,
-		## no special headers are needed
-		#[""],
-		## get the username
-		#HTTPClient.Method.METHOD_GET
-	#)
+	var error = req.cookie_request(
+		# the username is set based on the URL
+		full_url,
+		# no special headers are needed
+		session_id,
+		# get the username
+		HTTPClient.Method.METHOD_GET
+	)
 	if error != OK:
 		push_error("Error in getting username.")
 
@@ -66,19 +69,16 @@ func _on_create_username(_result, response_code, _headers, body):
 	"""
 	Attempts to create a username for the given user.
 	"""
-	print(response_code)
 	if response_code != HTTPClient.RESPONSE_OK:
 		# CRITICAL TODO: Notify the user in some way
-		print("The username creation failed. Reasoning:")
 		print(body.get_string_from_utf8())
+		push_error("The username creation failed. Reasoning:")
 
 
 func _on_get_username(_result, response_code, _headers, body):
 	"""
 	Performs the updating of the username value.
 	"""
-	print(_headers)
-	print("body: " + body.get_string_from_utf8())
 	if response_code != HTTPClient.RESPONSE_OK:
 		push_error("There was an error obtaining the username.")
 		# CRITICAL TODO: Notify the user if this fails

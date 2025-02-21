@@ -1,6 +1,6 @@
 extends Control
 
-var menu = load("res://scenes/main_menu.tscn").instantiate()
+var menu = "res://scenes/main_menu.tscn"
 
 
 func _on_login_button_pressed() -> void:
@@ -14,6 +14,4 @@ func _on_login_button_pressed() -> void:
 
 func _on_menu_button_pressed() -> void:
 		# change the scene to the main menu
-		get_tree().root.add_child(menu)
-		# "remove" the this login scene
-		get_tree().root.remove_child(get_node("."))
+		get_tree().change_scene_to_file(menu)

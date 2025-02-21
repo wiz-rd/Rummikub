@@ -1,14 +1,6 @@
 extends Node
 
-const server_url: String = "http://127.0.0.1"
-const api_string: String = "/api"
-var port: int = 8000
 var username: String
-
-# TODO:
-# This will have to be updated to remove the port
-# once the site is published externally
-var api_url: String = server_url + ":" + str(port) + api_string
 
 
 func create_username(usrnm: String):
@@ -21,14 +13,14 @@ func create_username(usrnm: String):
 	var req = CookieHTTPRequest.new()
 	add_child(req)
 
-	var full_url = api_url + "/user/" + usrnm
+	var full_url = Globals.API_URL + "/user/" + usrnm
 
 	req.request_completed.connect(_on_create_username)
 	var error = req.cookie_request(
 		# the username is set based on the URL
 		full_url,
 		# no special headers are needed
-		HTTPCookieStore._retrieve_cookies_for_header(server_url),
+		HTTPCookieStore._retrieve_cookies_for_header(Globals.SERVER_DOMAIN),
 		# put the username
 		HTTPClient.Method.METHOD_PUT
 	)
@@ -44,11 +36,11 @@ func get_username():
 	var req = CookieHTTPRequest.new()
 	add_child(req)
 
-	var full_url = api_url + "/user"
+	var full_url = Globals.API_URL + "/user"
 
-	var session_id = HTTPCookieStore.get_cookie_header_for_request(server_url)
+	var session_id = HTTPCookieStore.get_cookie_header_for_request(Globals.SERVER_DOMAIN)
 	if session_id == null:
-		session_id = HTTPCookieStore._retrieve_cookies_for_header(server_url)
+		session_id = HTTPCookieStore._retrieve_cookies_for_header(Globals.SERVER_DOMAIN)
 
 	req.request_completed.connect(_on_get_username)
 	var error = req.cookie_request(

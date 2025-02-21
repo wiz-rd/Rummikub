@@ -85,3 +85,19 @@ offset_top = -65.0
 offset_right = 63.0
 offset_bottom = 0.0
 grow_vertical = 0
+
+[node name="CopyCodeButton" type="Button" parent="ButtonsAndInput"]
+visible = false
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -191.0
+offset_right = 191.0
+offset_bottom = 65.0
+grow_horizontal = 2
+theme = ExtResource("2_wt7pc")
+text = "Copy Game Code"
+
+[connection signal="pressed" from="ButtonsAndInput/CreateGameButton" to="." method="_on_create_game_button_pressed"]
+[connection signal="pressed" from="ButtonsAndInput/CopyCodeButton" to="." method="_on_copy_code_button_pressed"]

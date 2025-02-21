@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3 uid="uid://bhnhvj1lk5ta6"]
+
+[ext_resource type="Theme" uid="uid://b4k17n0bd3vbh" path="res://resources/ui_theme.tres" id="1_dc0vj"]
+[ext_resource type="Script" path="res://scripts/menu_button.gd" id="2_hsrpp"]
+
+[node name="MenuButton" type="Button"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = -1728.0
+offset_bottom = -1015.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_dc0vj")
+text = "Menu"
+script = ExtResource("2_hsrpp")
+
+[connection signal="pressed" from="." to="." method="_on_pressed"]

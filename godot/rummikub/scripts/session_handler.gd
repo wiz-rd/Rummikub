@@ -21,7 +21,6 @@ func create_username(usrnm: String):
 	var req = CookieHTTPRequest.new()
 	add_child(req)
 
-	# TODO: delete debugging
 	var full_url = api_url + "/user/" + usrnm
 
 	req.request_completed.connect(_on_create_username)
@@ -45,7 +44,6 @@ func get_username():
 	var req = CookieHTTPRequest.new()
 	add_child(req)
 
-	# TODO: delete debugging
 	var full_url = api_url + "/user"
 
 	var session_id = HTTPCookieStore.get_cookie_header_for_request(server_url)
@@ -54,9 +52,9 @@ func get_username():
 
 	req.request_completed.connect(_on_get_username)
 	var error = req.cookie_request(
-		# the username is set based on the URL
+		# the URL
 		full_url,
-		# no special headers are needed
+		# the cookies, because I have to pass an argument here
 		session_id,
 		# get the username
 		HTTPClient.Method.METHOD_GET

@@ -17,6 +17,7 @@ config/features=PackedStringArray("4.3", "GL Compatibility")
 [autoload]
 
 SessionHandler="*res://scripts/session_handler.gd"
+Globals="*res://scripts/globals.gd"
 
 [display]
 

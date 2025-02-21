@@ -1,7 +1,9 @@
-[gd_scene load_steps=3 format=3 uid="uid://cgbgwur4imfvw"]
+[gd_scene load_steps=5 format=3 uid="uid://cgbgwur4imfvw"]
 
+[ext_resource type="Script" path="res://scripts/create_game.gd" id="1_kgpcu"]
 [ext_resource type="PackedScene" uid="uid://nox3o0e436mg" path="res://scenes/background.tscn" id="1_wa7fb"]
 [ext_resource type="Theme" uid="uid://b4k17n0bd3vbh" path="res://resources/ui_theme.tres" id="2_wt7pc"]
+[ext_resource type="PackedScene" uid="uid://bhnhvj1lk5ta6" path="res://scenes/menu_button.tscn" id="3_jlfta"]
 
 [node name="CreateGame" type="Control"]
 layout_mode = 3
@@ -10,6 +12,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("1_kgpcu")
 
 [node name="Background" parent="." instance=ExtResource("1_wa7fb")]
 layout_mode = 1
@@ -30,13 +33,17 @@ grow_vertical = 2
 
 [node name="GameCodeInput" type="LineEdit" parent="ButtonsAndInput"]
 layout_mode = 1
-anchors_preset = 5
+anchors_preset = 8
 anchor_left = 0.5
+anchor_top = 0.5
 anchor_right = 0.5
+anchor_bottom = 0.5
 offset_left = -368.0
+offset_top = -34.0
 offset_right = 368.0
-offset_bottom = 68.0
+offset_bottom = 34.0
 grow_horizontal = 2
+grow_vertical = 2
 theme = ExtResource("2_wt7pc")
 placeholder_text = "Enter game code"
 alignment = 1
@@ -44,31 +51,37 @@ max_length = 32
 
 [node name="JoinGameButton" type="Button" parent="ButtonsAndInput"]
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -117.5
-offset_top = -32.5
-offset_right = 117.5
-offset_bottom = 32.5
-grow_horizontal = 2
-grow_vertical = 2
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -235.0
+offset_top = -65.0
+grow_horizontal = 0
+grow_vertical = 0
 theme = ExtResource("2_wt7pc")
 text = "Join Game"
 
 [node name="CreateGameButton" type="Button" parent="ButtonsAndInput"]
 layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -65.0
+offset_right = 302.0
+grow_vertical = 0
+theme = ExtResource("2_wt7pc")
+text = "Create Game"
+
+[node name="MenuButton" parent="ButtonsAndInput" instance=ExtResource("3_jlfta")]
+layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -151.0
+offset_left = -63.0
 offset_top = -65.0
-offset_right = 151.0
-grow_horizontal = 2
+offset_right = 63.0
+offset_bottom = 0.0
 grow_vertical = 0
-theme = ExtResource("2_wt7pc")
-text = "Create Game"

@@ -20,6 +20,7 @@ const API_URL = SERVER_DOMAIN + ":" + PORT + API_STRING
 # to be used to store the entire game and information about it
 # so it can be acessed from any scene
 var game_data: Dictionary
+var user_in_game: bool = false
 
 
 func create_game() -> void:
@@ -29,13 +30,23 @@ func create_game() -> void:
 	var req = CookieHTTPRequest.new()
 	add_child(req)
 
-	var full_url = Globals.API_URL + "/game"
+	var full_url = API_URL + "/game"
 
-	req.request_completed.connect(_on_create_game)
+	req.request_completed.connect(func (_result, response_code, _headers, body):
+		if response_code != HTTPClient.RESPONSE_CREATED:
+			# TODO: add better error messaging to client
+			push_error("The request succeeded but the server failed to create a game.")
+			return
+
+		var json = JSON.new()
+		json.parse(body.get_string_from_utf8())
+		game_data = json.get_data()
+	)
+
 	var error = req.cookie_request(
 		# the username is set based on the URL
 		full_url,
-		# no special headers are needed
+		# placeholder headers
 		HTTPCookieStore._retrieve_cookies_for_header(SERVER_DOMAIN),
 		# put the username
 		HTTPClient.Method.METHOD_POST
@@ -46,12 +57,36 @@ func create_game() -> void:
 		push_error("Error creating game.")
 
 
-func _on_create_game(_result, response_code, _headers, body) -> void:
-	if response_code != HTTPClient.RESPONSE_CREATED:
-		# TODO: add better error messaging to client
-		push_error("The request succeeded but the server failed to create a game.")
-		return
+func join_game(game_id: String) -> bool:
+	"""
+	Requests the server to join a game.
+	Returns true if joining the game was a success.
+	"""
+	var req = CookieHTTPRequest.new()
+	add_child(req)
 
-	var json = JSON.new()
-	json.parse(body.get_string_from_utf8())
-	game_data = json.get_data()
+	var full_url: String = API_URL + "/game/" + game_id + "/join"
+
+	# using an anonymous function here so I can modify a variable
+	# without having to use globals
+	req.request_completed.connect(func (_result, response_code, _headers, _body):
+		if response_code != HTTPClient.RESPONSE_CREATED:
+			# TODO: Let client know
+			push_error("The join game request succeeded but the server rejected it.")
+			Globals.user_in_game = false
+			# nothing else is needed to be done. The user should join the game.
+		Globals.user_in_game = true
+	)
+
+	var error = req.cookie_request(
+		full_url,
+		HTTPCookieStore._retrieve_cookies_for_header(SERVER_DOMAIN),
+		HTTPClient.METHOD_POST
+	)
+
+	if error:
+		# TODO: better user notification needed
+		push_error("Error joining game.")
+		Globals.user_in_game = false
+
+	return Globals.user_in_game

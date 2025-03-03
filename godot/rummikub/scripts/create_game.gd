@@ -24,6 +24,25 @@ func _on_create_game_button_pressed() -> void:
 	Attempt to create a game on the server.
 	"""
 	Globals.create_game()
-	await Globals.game_data
 	$ButtonsAndInput/CopyCodeButton.visible = true
 	$ButtonsAndInput/CreateGameButton.visible = false
+
+	while (Globals.game_data == null or Globals.game_data.is_empty()):
+		await get_tree().create_timer(0.1).timeout
+		if Globals.game_data.has("failed"):
+			push_error("Game data was not saved correctly.")
+
+	$ButtonsAndInput/GameCodeInput.text = Globals.game_data.id
+
+
+func _on_join_game_button_pressed() -> void:
+	"""
+	Attempts to join a game.
+	"""
+	var game_id: String = $ButtonsAndInput/GameCodeInput.text
+	var game_joined: bool = Globals.join_game(game_id)
+
+	if game_joined:
+		get_tree().change_scene_to_file(Globals.TABLE_SCENE)
+	else:
+		push_error("There was an issue with joining the game.")

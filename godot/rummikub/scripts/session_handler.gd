@@ -26,6 +26,7 @@ func create_username(usrnm: String):
 	)
 	if error != OK:
 		push_error("Error in setting username.")
+	print(error)
 
 
 func get_username():
@@ -62,7 +63,7 @@ func _on_create_username(_result, response_code, _headers, body):
 	if response_code != HTTPClient.RESPONSE_OK:
 		# CRITICAL TODO: Notify the user in some way
 		print(body.get_string_from_utf8())
-		push_error("The username creation failed. Reasoning:")
+		push_error("The username creation failed. Body: " + str(body))
 
 
 func _on_get_username(_result, response_code, _headers, body):

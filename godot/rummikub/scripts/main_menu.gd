@@ -6,12 +6,15 @@ func _on_start_button_pressed() -> void:
 		# change the scene to CreateSession
 		get_tree().change_scene_to_file(Globals.LOGIN_SCENE)
 	else:
-		# change the scene to Table
-		# TODO: change this to the CreateGame
-		# scene AND CRITICAL add logic to the
+		# TODO: CRITICAL add logic to the
 		# CreateGame scene to, if the user is already
 		# in a game they try and join, reopen said game.
-		get_tree().change_scene_to_file(Globals.TABLE_SCENE)
+		if Globals.user_in_game:
+			get_tree().change_scene_to_file(Globals.TABLE_SCENE)
+		else:
+			# go to the "join/create game scene" if the
+			# user isn't in a game already
+			get_tree().change_scene_to_file(Globals.GAME_MANAGEMENT_SCENE)
 
 
 func _on_attributions_button_pressed() -> void:

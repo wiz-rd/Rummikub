@@ -26,7 +26,6 @@ func create_username(usrnm: String):
 	)
 	if error != OK:
 		push_error("Error in setting username.")
-	print(error)
 
 
 func get_username():

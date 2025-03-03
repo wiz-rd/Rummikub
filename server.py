@@ -1080,7 +1080,8 @@ class UserController(Controller):
             session["username"] = username
             return {
                 "status_code": status_codes.HTTP_200_OK,
-                "detail": f"Your username was successfully set to {username}."
+                "detail": f"Your username was successfully set to {username}.",
+                "username": username,
             }
         except AttributeError:
             raise HTTPException(status_code=status_codes.HTTP_500_INTERNAL_SERVER_ERROR, detail="Something went wrong...")

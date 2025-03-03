@@ -70,10 +70,21 @@ func join_game(game_id: String) -> bool:
 	# using an anonymous function here so I can modify a variable
 	# without having to use globals
 	req.request_completed.connect(func (_result, response_code, _headers, _body):
-		if response_code != HTTPClient.RESPONSE_CREATED:
+		if response_code == HTTPClient.RESPONSE_IM_A_TEAPOT:
+			# this is just to make things easier but the
+			# "418 - I'm a teapot" in this case means the user
+			# is already in a game.
+			Globals.user_in_game = true
+			push_warning("The user is already in a game.")
+		elif response_code == HTTPClient.RESPONSE_LOCKED:
+			push_warning("The game is already ongoing and cannot be joined.")
+		elif response_code == HTTPClient.RESPONSE_NOT_ACCEPTABLE:
+			push_warning("The game is full!")
+		elif response_code != HTTPClient.RESPONSE_CREATED:
 			# TODO: Let client know
 			push_error("The join game request succeeded but the server rejected it.")
 			Globals.user_in_game = false
+			return
 			# nothing else is needed to be done. The user should join the game.
 		Globals.user_in_game = true
 	)

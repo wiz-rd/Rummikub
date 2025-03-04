@@ -1,9 +1,11 @@
-[gd_scene load_steps=6 format=3 uid="uid://dfj1455wrc3bs"]
+[gd_scene load_steps=8 format=3 uid="uid://dfj1455wrc3bs"]
 
 [ext_resource type="Script" path="res://scripts/table.gd" id="1_5k6o5"]
 [ext_resource type="Theme" uid="uid://b4k17n0bd3vbh" path="res://resources/ui_theme.tres" id="1_c7kov"]
 [ext_resource type="Theme" uid="uid://cpnw4fnh7oc1" path="res://resources/tile_and_font_theme.tres" id="1_lqy8q"]
 [ext_resource type="PackedScene" uid="uid://nox3o0e436mg" path="res://scenes/background.tscn" id="1_u8kjt"]
+[ext_resource type="PackedScene" uid="uid://dvulu7828ytpk" path="res://scenes/tile.tscn" id="5_g7niy"]
+[ext_resource type="Script" path="res://scripts/httpsse.gd" id="6_0xus0"]
 
 [sub_resource type="PlaceholderTexture2D" id="PlaceholderTexture2D_hrs57"]
 
@@ -105,6 +107,20 @@ text = "Tiles left: NUM"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="Tile" parent="Pool" instance=ExtResource("5_g7niy")]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -36.5
+offset_top = -110.0
+offset_right = 36.5
+offset_bottom = 0.0
+grow_horizontal = 2
+grow_vertical = 0
+
 [node name="PlayerRegion0" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = 4
@@ -157,7 +173,11 @@ offset_bottom = 40.5
 grow_horizontal = 2
 grow_vertical = 2
 theme = ExtResource("1_c7kov")
+text = "defaultname"
 vertical_alignment = 2
 text_overrun_behavior = 3
+
+[node name="HTTPSSE" type="Node" parent="."]
+script = ExtResource("6_0xus0")
 
 [connection signal="ready" from="UsernamePadding/Username" to="." method="_on_username_ready"]
